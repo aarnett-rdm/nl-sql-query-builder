@@ -30,7 +30,8 @@ Ask questions in plain English, get SQL queries and results from your data wareh
 - 🎨 **Streamlit UI**: Clean chat interface with direct query execution
 - 🔐 **Fabric Authentication**: Seamless integration with Microsoft Fabric DW
 - 🧪 **Comprehensive Testing**: 260 tests covering all major functionality
-- 📝 **Feedback Loop**: Learn from corrections to improve accuracy
+- 📝 **Feedback System**: Thumbs up/down, correction forms, pattern analysis, auto-improvement loop
+- 📊 **Admin Dashboard**: Track feedback patterns, download analysis, monitor improvements
 
 ## 🏗️ Architecture
 
@@ -204,12 +205,41 @@ Internal tool for Red Dog Media Inc.
 
 New to Git? Check out [GIT_CHEAT_SHEET.md](GIT_CHEAT_SHEET.md) - it covers just the 3 commands you need!
 
+## 🔄 Feedback & Continuous Improvement
+
+### User Feedback
+After each query, users can:
+- Click 👍 if the query is correct
+- Click 👎 to report issues with correction details
+- System stores feedback for pattern analysis
+
+### Admin Dashboard
+Access via Streamlit sidebar → **Feedback Dashboard**:
+- Summary statistics and trends
+- Top issues by category
+- Recent feedback viewer
+- Download analysis reports
+
+### Automated Improvement Loop
+1. Users submit feedback via UI
+2. System detects patterns (metric synonyms, dimension preferences, etc.)
+3. Admin downloads `RECOMMENDATIONS.md` or `FEEDBACK_LOG.md`
+4. Upload to Claude Code for automated fixes
+5. Claude implements improvements and pushes to GitHub
+6. Users get updates automatically via `git pull`
+
+**Files:**
+- `feedback/corrections.jsonl` - Raw feedback data
+- `feedback/FEEDBACK_LOG.md` - Human-readable log for review
+- `feedback/RECOMMENDATIONS.md` - Analyzed patterns with actionable fixes
+
 ## 🚦 Status
 
 - ✅ **Core**: LLM integration, multi-fact queries, disambiguation
-- ✅ **UI**: Chat interface, multi-date reporting, direct execution
+- ✅ **UI**: Chat interface, multi-date reporting, direct execution, feedback system
 - ✅ **Testing**: 260 tests, evaluation harness, feedback loop
 - ✅ **Docs**: User guides, API docs, developer docs
+- ✅ **Feedback**: Complete loop with UI, dashboard, and markdown export
 - 🚧 **Next**: Department rollout and stress testing
 
 ---

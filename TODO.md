@@ -255,6 +255,20 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 
 **Value:** Makes queries reusable and shareable, builds institutional knowledge over time
 
+### 7.4 Feedback & Continuous Improvement System — **DONE** (Feb 16, 2026)
+- ~~Feedback UI in Query Builder~~ → 👍👎 buttons after each SQL query, expandable correction form with 6 correction types
+- ~~Feedback storage~~ → JSONL append-only store at `feedback/corrections.jsonl` (thread-safe via `FeedbackStore`)
+- ~~Pattern analysis~~ → `tools/feedback_analyzer.py` detects: metric synonyms, dimension preferences, date filter gaps, platform aliases, few-shot candidates
+- ~~Markdown export~~ → Generates `FEEDBACK_LOG.md` (human-readable log) + `RECOMMENDATIONS.md` (actionable fixes)
+- ~~Admin dashboard~~ → `ui/pages/Feedback_Dashboard.py` with stats, top issues, recent feedback viewer, download buttons
+- ~~Auto-regeneration~~ → API triggers markdown regeneration every 5 feedback submissions
+- ~~Improvement loop~~ → Admin downloads MD files → uploads to Claude Code → Claude implements fixes → pushes to GitHub → users get updates via git pull
+- **Correction types:** metric_mismatch, dimension_wrong, platform_wrong, date_filter_wrong, filter_wrong, other
+- **Files created:** `feedback/corrections.jsonl`, `feedback/FEEDBACK_LOG.md`, `feedback/RECOMMENDATIONS.md`
+- **CLI:** `python tools/feedback_analyzer.py [--min-count N] [--max-recent N]`
+
+**Value:** Zero-friction feedback mechanism, automated pattern detection, direct feedback-to-fix loop with AI, continuous improvement tracked in Git
+
 ---
 
 ## Out of Scope (Documented for Future)
