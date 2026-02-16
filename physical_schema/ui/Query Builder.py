@@ -24,6 +24,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from ui.shared import format_results, init_fabric_state, render_fabric_sidebar  # noqa: E402
+from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -297,6 +298,41 @@ def render_chat_history():
             # Show previously fetched results
             if msg.get("results") is not None:
                 df = msg["results"]
+
+                # Detect visualization opportunity
+                viz_info = detect_visualization_opportunity(df)
+
+                # Show chart if suitable
+                if viz_info["should_visualize"]:
+                    # Initialize chart visibility state for this message
+                    chart_key = f"show_chart_{idx}"
+                    if chart_key not in st.session_state:
+                        st.session_state[chart_key] = True  # Auto-show by default
+
+                    # Toggle button
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        if st.session_state[chart_key]:
+                            if st.button("📊 Hide Chart", key=f"hide_chart_{idx}", use_container_width=True):
+                                st.session_state[chart_key] = False
+                                st.rerun()
+                        else:
+                            if st.button("📊 Show Chart", key=f"show_chart_{idx}", use_container_width=True):
+                                st.session_state[chart_key] = True
+                                st.rerun()
+
+                    with col2:
+                        st.caption(f"💡 {viz_info['reason']}")
+
+                    # Display chart if visible
+                    if st.session_state[chart_key]:
+                        try:
+                            fig = create_chart(df, viz_info["chart_type"], viz_info["config"])
+                            st.plotly_chart(fig, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Chart generation failed: {e}")
+
+                # Show data table
                 st.dataframe(format_results(df), use_container_width=True)
                 st.caption(f"Showing {len(df):,} row(s)")
 

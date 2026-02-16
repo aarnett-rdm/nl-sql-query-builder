@@ -24,6 +24,7 @@ from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.metric_resolver import MetricRegistry  # noqa: E402
 from tools.spec_executor import execute_spec, normalize_spec  # noqa: E402
 from ui.shared import format_results, init_fabric_state, render_fabric_sidebar  # noqa: E402
+from ui.viz_utils import create_chart  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -54,6 +55,10 @@ if "detail_filters" not in st.session_state:
     st.session_state.detail_filters = []
 if "metric_order" not in st.session_state:
     st.session_state.metric_order = []
+if "show_summary_chart" not in st.session_state:
+    st.session_state.show_summary_chart = True
+if "show_campaign_chart" not in st.session_state:
+    st.session_state.show_campaign_chart = True
 
 # ---------------------------------------------------------------------------
 # Helper Functions
@@ -694,6 +699,36 @@ def main():
 
         matrix = st.session_state.comparison_results
 
+        # Toggle button for chart/table view
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.session_state.show_summary_chart:
+                if st.button("📊 Hide Chart", key="hide_summary_chart", use_container_width=True):
+                    st.session_state.show_summary_chart = False
+                    st.rerun()
+            else:
+                if st.button("📊 Show Chart", key="show_summary_chart_btn", use_container_width=True):
+                    st.session_state.show_summary_chart = True
+                    st.rerun()
+
+        # Display chart if enabled
+        if st.session_state.show_summary_chart:
+            try:
+                # Create a grouped bar chart comparing metrics across date ranges
+                # Prepare data: date ranges on x-axis, metrics as separate bars
+                chart_config = {
+                    "x_col": matrix.index.name or "Date Range",
+                    "y_cols": list(matrix.columns)
+                }
+
+                # Reset index to make Date Range a column
+                chart_df = matrix.reset_index()
+
+                fig = create_chart(chart_df, "grouped_bar", chart_config)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Chart generation failed: {e}")
+
         # Display formatted matrix
         st.dataframe(
             format_results(matrix),
@@ -709,6 +744,63 @@ def main():
             st.subheader("Campaign-Level Details")
 
             campaign_df = st.session_state.campaign_details
+
+            # Chart toggle and visualization
+            col1, col2, col3 = st.columns([1, 2, 2])
+            with col1:
+                if st.session_state.show_campaign_chart:
+                    if st.button("📊 Hide Chart", key="hide_campaign_chart", use_container_width=True):
+                        st.session_state.show_campaign_chart = False
+                        st.rerun()
+                else:
+                    if st.button("📊 Show Chart", key="show_campaign_chart_btn", use_container_width=True):
+                        st.session_state.show_campaign_chart = True
+                        st.rerun()
+
+            with col2:
+                # Metric selector for chart
+                chart_metric = st.selectbox(
+                    "Chart Metric",
+                    options=[col for col in campaign_df.columns if col not in ["Campaign Name", "Date Range"]],
+                    index=0,
+                    key="campaign_chart_metric",
+                    help="Select which metric to visualize"
+                )
+
+            with col3:
+                # Top N selector
+                top_n = st.slider(
+                    "Top Campaigns",
+                    min_value=5,
+                    max_value=20,
+                    value=10,
+                    step=5,
+                    key="campaign_chart_top_n",
+                    help="Number of top campaigns to display"
+                )
+
+            # Display chart if enabled
+            if st.session_state.show_campaign_chart and chart_metric:
+                try:
+                    # Get top N campaigns by selected metric (sum across all date ranges)
+                    top_campaigns = (
+                        campaign_df.groupby("Campaign Name")[chart_metric]
+                        .sum()
+                        .nlargest(top_n)
+                        .reset_index()
+                    )
+
+                    chart_config = {
+                        "x_col": chart_metric,
+                        "y_col": "Campaign Name",
+                        "sort_by": chart_metric,
+                        "limit": top_n
+                    }
+
+                    fig = create_chart(top_campaigns, "horizontal_bar", chart_config)
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Chart generation failed: {e}")
 
             # Filter UI
             with st.expander("🔍 Filter Campaign Details", expanded=False):

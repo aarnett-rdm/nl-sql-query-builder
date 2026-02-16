@@ -25,11 +25,13 @@ Ask questions in plain English, get SQL queries and results from your data wareh
 ## ✨ Features
 
 - 🤖 **LLM-Powered**: Uses Ollama (qwen3:14b) to understand natural language
-- 📊 **Multi-Date Reporting**: Compare metrics across multiple date ranges
+- 📊 **Interactive Visualizations**: Auto-generated Plotly charts (line, bar, area, etc.) with export to PNG/HTML
+- 📈 **Visual Reports Builder**: Custom chart builder with templates, save/load configs, and multi-metric support
+- 📊 **Multi-Date Reporting**: Compare metrics across multiple date ranges with visualization
 - 🔍 **Smart Disambiguation**: Asks clarifying questions when needed
 - 🎨 **Streamlit UI**: Clean chat interface with direct query execution
 - 🔐 **Fabric Authentication**: Seamless integration with Microsoft Fabric DW
-- 🧪 **Comprehensive Testing**: 260 tests covering all major functionality
+- 🧪 **Comprehensive Testing**: 260+ tests covering all major functionality
 - 📝 **Feedback System**: Thumbs up/down, correction forms, pattern analysis, auto-improvement loop
 - 📊 **Admin Dashboard**: Track feedback patterns, download analysis, monitor improvements
 
@@ -71,18 +73,25 @@ physical_schema/
 ├── api/                    # FastAPI backend
 │   └── app.py             # Main API with /query and /feedback endpoints
 ├── ui/                     # Streamlit frontend
-│   ├── Query Builder.py   # Chat interface
+│   ├── Query Builder.py   # Chat interface with auto-visualization
 │   ├── pages/
-│   │   └── Multi Date Reporting.py
-│   └── shared.py          # Shared UI utilities
+│   │   ├── Multi Date Reporting.py      # Multi-date comparison with charts
+│   │   ├── Visual_Reports.py            # Custom chart builder
+│   │   └── Feedback_Dashboard.py        # Admin feedback dashboard
+│   ├── shared.py          # Shared UI utilities (format_results, Fabric sidebar)
+│   └── viz_utils.py       # Visualization utilities (Plotly chart generation)
 ├── tools/                  # Core logic
 │   ├── llm_adapter.py     # LLM integration (Ollama)
 │   ├── spec_executor.py   # Spec → Query plan
 │   ├── query_builder.py   # Query plan → SQL
 │   ├── metric_resolver.py # Metric registry & multi-fact CTE
 │   ├── join_planner.py    # Dijkstra join path finding
+│   ├── fabric_conn.py     # Fabric DW connection (pyodbc + azure-identity)
+│   ├── feedback_store.py  # Feedback storage (JSONL)
+│   ├── feedback_analyzer.py # Pattern detection & recommendations
 │   └── ...
-├── tests/                  # 260 tests (pytest)
+├── tests/                  # 260+ tests (pytest)
+│   └── test_viz_utils.py  # 21 visualization tests
 ├── current/                # Config files
 │   ├── physical_schema.json
 │   ├── metric_registry.json
@@ -91,8 +100,12 @@ physical_schema/
 │   ├── system_prompt.txt
 │   ├── few_shot_examples.json
 │   └── disambiguation_prompt.txt
-└── evals/                  # Evaluation framework
-    └── eval_dataset.json
+├── evals/                  # Evaluation framework
+│   └── eval_dataset.json
+└── feedback/               # User feedback storage
+    ├── corrections.jsonl
+    ├── FEEDBACK_LOG.md
+    └── RECOMMENDATIONS.md
 ```
 
 ### Running Tests
@@ -237,10 +250,11 @@ Access via Streamlit sidebar → **Feedback Dashboard**:
 
 - ✅ **Core**: LLM integration, multi-fact queries, disambiguation
 - ✅ **UI**: Chat interface, multi-date reporting, direct execution, feedback system
-- ✅ **Testing**: 260 tests, evaluation harness, feedback loop
+- ✅ **Visualizations**: Auto-charts in Query Builder, chart builder page, 7 chart types, PNG/HTML export
+- ✅ **Testing**: 260+ tests, evaluation harness, feedback loop
 - ✅ **Docs**: User guides, API docs, developer docs
 - ✅ **Feedback**: Complete loop with UI, dashboard, and markdown export
-- 🚧 **Next**: Department rollout and stress testing
+- 🚧 **Next**: LLM-driven visualization requests, department rollout
 
 ---
 
