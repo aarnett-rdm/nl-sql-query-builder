@@ -44,9 +44,8 @@ Python is the programming language the app runs on.
    ```
 3. Download the app by copying and pasting this command:
    ```
-   git clone https://github.com/YOUR-ORG/nl-sql-builder.git
+   git clone https://github.com/aarnett-rdm/nl-sql-query-builder.git
    ```
-   *(Replace YOUR-ORG with your actual GitHub organization name)*
 4. Wait for it to download (takes about 30 seconds)
 
 > **Screenshot placeholder:** Command Prompt showing successful git clone
@@ -57,7 +56,7 @@ Still in Command Prompt:
 
 1. Go into the app folder:
    ```
-   cd nl-sql-builder
+   cd nl-sql-query-builder
    ```
 2. Install required packages (this takes 2-3 minutes):
    ```
@@ -72,7 +71,7 @@ Still in Command Prompt:
 
 This makes it super easy to start the app later:
 
-1. Find the file `start_app.bat` in your `nl-sql-builder` folder
+1. Find the file `start_app.bat` in your `nl-sql-query-builder` folder
 2. Right-click it → "Send to" → "Desktop (create shortcut)"
 3. Now you can double-click this shortcut to start the app!
 
@@ -92,7 +91,7 @@ This makes it super easy to start the app later:
 1. Open Command Prompt
 2. Navigate to the app folder:
    ```
-   cd Documents\nl-sql-builder
+   cd Documents\nl-sql-query-builder
    ```
 3. Run the launcher:
    ```
@@ -154,7 +153,7 @@ Or just close the Command Prompt window directly - the app will stop automatical
 
 **Fix:** Dependencies weren't installed correctly.
 1. Open Command Prompt
-2. Navigate to the app folder: `cd Documents\nl-sql-builder`
+2. Navigate to the app folder: `cd Documents\nl-sql-query-builder`
 3. Re-run the install commands:
    ```
    pip install -r physical_schema/requirements.txt
@@ -175,17 +174,17 @@ If you see files downloading - the app is updating itself. Wait for it to finish
 
 ### Report a Bug or Request a Feature
 
-1. Go to: https://github.com/YOUR-ORG/nl-sql-builder/issues
+1. Go to: https://github.com/aarnett-rdm/nl-sql-query-builder/issues
 2. Click "New Issue"
 3. Describe what went wrong (or what feature you'd like)
 4. Include screenshots if possible
 
 ### Ask for Help
 
-Contact [YOUR NAME] via:
-- Email: your.email@company.com
-- Teams: @yourname
-- Slack: #nl-sql-builder (if you have a channel)
+Contact Andrew Arnett via:
+- Email: aarnett@reddogmediainc.com
+- Teams: @aarnett
+- GitHub Issues: https://github.com/aarnett-rdm/nl-sql-query-builder/issues
 
 ---
 

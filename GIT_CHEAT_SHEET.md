@@ -9,7 +9,7 @@ This is a quick reference for the **3 Git commands** you need to use the Query B
 ### 1️⃣ Clone (Download the App) - Do Once
 
 ```bash
-git clone https://github.com/YOUR-ORG/nl-sql-builder.git
+git clone https://github.com/aarnett-rdm/nl-sql-query-builder.git
 ```
 
 **What it does:** Downloads the app to your computer for the first time.
@@ -19,8 +19,8 @@ git clone https://github.com/YOUR-ORG/nl-sql-builder.git
 **Example:**
 ```bash
 cd Documents
-git clone https://github.com/YOUR-ORG/nl-sql-builder.git
-cd nl-sql-builder
+git clone https://github.com/aarnett-rdm/nl-sql-query-builder.git
+cd nl-sql-query-builder
 ```
 
 ---
@@ -37,7 +37,7 @@ git pull
 
 **Example:**
 ```bash
-cd Documents\nl-sql-builder
+cd Documents\nl-sql-query-builder
 git pull
 ```
 
@@ -60,7 +60,7 @@ git status
 
 **Example:**
 ```bash
-cd Documents\nl-sql-builder
+cd Documents\nl-sql-query-builder
 git status
 ```
 
@@ -82,7 +82,7 @@ git status
 
 **Manual way:**
 ```bash
-cd Documents\nl-sql-builder
+cd Documents\nl-sql-query-builder
 git pull
 cd physical_schema
 streamlit run ui/Query Builder.py
@@ -93,7 +93,7 @@ streamlit run ui/Query Builder.py
 ### "Is there a new version?"
 
 ```bash
-cd Documents\nl-sql-builder
+cd Documents\nl-sql-query-builder
 git status
 ```
 
@@ -171,7 +171,7 @@ git pull
 
 **Fix:**
 ```bash
-cd Documents\nl-sql-builder
+cd Documents\nl-sql-query-builder
 # Now try your git command again
 ```
 
@@ -237,8 +237,8 @@ Print this and keep it at your desk:
 - GitHub guides: https://guides.github.com/
 
 ### For App Issues
-- Contact: [YOUR NAME] via email/Teams/Slack
-- Create an issue: https://github.com/YOUR-ORG/nl-sql-builder/issues
+- Contact: Andrew Arnett via email/Teams
+- Create an issue: https://github.com/aarnett-rdm/nl-sql-query-builder/issues
 
 ---
 
