@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "source": "Database Breakdown.docx",
+  "tables": [
+    {
+      "logical_name": "GoTicketsAuctionInsightMetric",
+      "family": "GoTicketsAuctionInsightMetric",
+      "description": "GoogleAdsAdGroupAuctionInsightMetric",
+      "platform": "generic",
+      "grain": "unknown",
+      "columns": [],
+      "example_rows": [
+        {
+          "_raw": "\uec03{\n\"ChangeRecordId\": \"2f6da0ab-7ec8-4d1e-bdad-52fab843f56d\",\n\"Source\": \"RedDog.DataPlatform\",\n\"EventType\": \"MicrosoftAdsCampaignPerformanceMetric\",\n\"SchemaVersion\": \"1\",\n\"ChangedTimestampUtc\": \"2025-08-21T04:48:11.0482757\",\n\"PartitionKey\": \"569260077\",\n\"Data\": {\n\"CampaignId\": 569260077,\n\"CalendarId\": 2025052110,\n\"AccountId\": 138890411,\n\"Impressions\": 0,\n\"Cost\": 0,\n\"Clicks\": 0,\n\"TotalConversions\": 0,\n\"TotalRevenue\": 0,\n\"ProcessedConversions\": 0,\n\"ProcessedRevenue\": 0,\n\"PendingConversions\": 0,\n\"PendingRevenue\": 0,\n\"CancelledConversions\": 0,\n\"CancelledRevenue\": 0,\n\"ProcessedProfit\": 0,\n\"ActiveProfit\": 0,\n\"ChangedTimestampUtc\": \"2025-08-21T04:48:11.0482757\"\n}\n}\n\uec02Example Change Event C# class:\n\uec03public record MicrosoftAdsCampaignPerformanceMetric\n{\npublic long CampaignId { get; init; }"
+        }
+      ]
+    }
+  ],
+  "relationships": []
+}

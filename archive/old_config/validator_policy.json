@@ -1,0 +1,10 @@
+{
+  "mode": "strict",
+  "allow_inferred_filters": true,
+  "enforce_platform_locks_strictly": true,
+  "allow_auto_mapping_synonyms": true,
+  "allow_ungrounded_metrics": true,
+  "ungrounded_metrics_behavior": "warn",
+  "prune_ungrounded_after_confirmation": true,
+  "suggest_canonical_examples": true
+}

@@ -1,0 +1,938 @@
+{
+  "metrics": {
+    "impressions": {
+      "semantic_name": "impressions",
+      "metric_class": "performance_count",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "Impressions"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "Impressions"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "Impressions"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "Impressions"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "clicks": {
+      "semantic_name": "clicks",
+      "metric_class": "performance_count",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "Clicks"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "Clicks"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "Clicks"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "Clicks"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "cost": {
+      "semantic_name": "cost",
+      "metric_class": "cost",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "Cost"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "Cost"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "Cost"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "Cost"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "conversions": {
+      "semantic_name": "conversions",
+      "metric_class": "conversion_count",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "ProcessedConversions"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "ProcessedConversions"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "ProcessedConversions"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "ProcessedConversions"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "revenue": {
+      "semantic_name": "revenue",
+      "metric_class": "revenue",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "ProcessedRevenue"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "ProcessedRevenue"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "ProcessedRevenue"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "ProcessedRevenue"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "commission": {
+      "semantic_name": "commission",
+      "metric_class": "commission",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "EventOrderMetric",
+          "column": "TotalEstimatedCommission"
+        },
+        {
+          "table": "Order",
+          "column": "TotalEstimatedCommission"
+        }
+      ],
+      "domains": [
+        "orders"
+      ],
+      "supported_grains": [
+        "event_calendar",
+        "order"
+      ],
+      "grain_preference_order": [
+        "event_calendar",
+        "order"
+      ],
+      "preferred_fact_table": {
+        "event_calendar": {
+          "gotickets": [
+            "EventOrderMetric"
+          ]
+        },
+        "order": {
+          "gotickets": [
+            "Order"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": true,
+        "requires_explicit": true,
+        "from_grains": [
+          "event_calendar",
+          "order"
+        ],
+        "to_grains": [
+          "campaign_calendar",
+          "adgroup_calendar",
+          "campaign",
+          "adgroup"
+        ],
+        "notes": "Rollups require attribution semantics; do not auto-rollup.",
+        "strategy": "attribution_required"
+      },
+      "default_grain": "event_calendar"
+    },
+    "profit": {
+      "semantic_name": "profit",
+      "metric_class": "profit",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignPerformanceMetric",
+          "column": "ProcessedProfit"
+        },
+        {
+          "table": "GoogleAdsAdGroupPerformanceMetric",
+          "column": "ProcessedProfit"
+        },
+        {
+          "table": "MicrosoftAdsCampaignPerformanceMetric",
+          "column": "ProcessedProfit"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupPerformanceMetric",
+          "column": "ProcessedProfit"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+          "google_ads": [
+            "GoogleAdsCampaignPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignPerformanceMetric"
+          ]
+        },
+        "adgroup_calendar": {
+          "google_ads": [
+            "GoogleAdsAdGroupPerformanceMetric"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupPerformanceMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar",
+      "default_source": "ProcessedProfit"
+    },
+    "target roas value": {
+      "semantic_name": "troas",
+      "metric_class": "target",
+      "default_aggregation": "avg",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "GoogleAdsAdGroupBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "MicrosoftAdsCampaignBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupBidChange",
+          "column": "LastBidPublishValue"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup",
+        "campaign"
+      ],
+      "grain_preference_order": [
+        "adgroup",
+        "campaign"
+      ],
+      "preferred_fact_table": {
+        "campaign": {
+          "google_ads": [
+            "GoogleAdsCampaignBidChange"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignBidChange"
+          ]
+        },
+        "adgroup": {
+          "google_ads": [
+            "GoogleAdsAdGroupBidChange"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupBidChange"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "adgroup"
+    },
+    "target cpa value": {
+      "semantic_name": "tcpa",
+      "metric_class": "target",
+      "default_aggregation": "avg",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "GoogleAdsAdGroupBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "MicrosoftAdsCampaignBidChange",
+          "column": "LastBidPublishValue"
+        },
+        {
+          "table": "MicrosoftAdsAdGroupBidChange",
+          "column": "LastBidPublishValue"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup",
+        "campaign"
+      ],
+      "grain_preference_order": [
+        "adgroup",
+        "campaign"
+      ],
+      "preferred_fact_table": {
+        "campaign": {
+          "google_ads": [
+            "GoogleAdsCampaignBidChange"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsCampaignBidChange"
+          ]
+        },
+        "adgroup": {
+          "google_ads": [
+            "GoogleAdsAdGroupBidChange"
+          ],
+          "microsoft_ads": [
+            "MicrosoftAdsAdGroupBidChange"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "adgroup"
+    },
+    "impression share": {
+      "semantic_name": "impression share",
+      "metric_class": "share",
+      "default_aggregation": "avg",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignAuctionInsightMetric",
+          "column": "SearchImpressionShare"
+        },
+        {
+          "table": "GoogleAdsAdGroupAuctionInsightMetric",
+          "column": "SearchImpressionShare"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup",
+        "campaign"
+      ],
+      "grain_preference_order": [
+        "adgroup",
+        "campaign"
+      ],
+      "preferred_fact_table": {
+        "campaign": {
+          "google_ads": [
+            "GoogleAdsCampaignAuctionInsightMetric"
+          ]
+        },
+        "adgroup": {
+          "google_ads": [
+            "GoogleAdsAdGroupAuctionInsightMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "adgroup"
+    },
+    "abs top impression share": {
+      "semantic_name": "abs top impression share",
+      "metric_class": "share",
+      "default_aggregation": "avg",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignAuctionInsightMetric",
+          "column": "AbsoluteTopImpressionPercentage"
+        },
+        {
+          "table": "GoogleAdsAdGroupAuctionInsightMetric",
+          "column": "AbsoluteTopImpressionPercentage"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup",
+        "campaign"
+      ],
+      "grain_preference_order": [
+        "adgroup",
+        "campaign"
+      ],
+      "preferred_fact_table": {
+        "campaign": {
+          "google_ads": [
+            "GoogleAdsCampaignAuctionInsightMetric"
+          ]
+        },
+        "adgroup": {
+          "google_ads": [
+            "GoogleAdsAdGroupAuctionInsightMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "adgroup"
+    },
+    "click share": {
+      "semantic_name": "click share",
+      "metric_class": "share",
+      "default_aggregation": "avg",
+      "base_columns": [
+        {
+          "table": "GoogleAdsCampaignAuctionInsightMetric",
+          "column": "SearchClickShare"
+        }
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "campaign"
+      ],
+      "grain_preference_order": [
+        "campaign"
+      ],
+      "preferred_fact_table": {
+        "campaign": {
+          "google_ads": [
+            "GoogleAdsCampaignAuctionInsightMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign"
+    },
+    "exchange revenue": {
+      "semantic_name": "exchange revenue",
+      "metric_class": "revenue",
+      "default_aggregation": "sum",
+      "base_columns": [
+        {
+          "table": "ClosePeerExchangeMetric",
+          "column": "ExchangeRevenue"
+        }
+      ],
+      "domains": [
+        "benchmark"
+      ],
+      "supported_grains": [
+        "event_calendar"
+      ],
+      "grain_preference_order": [
+        "event_calendar"
+      ],
+      "preferred_fact_table": {
+        "event_calendar": {
+          "exchange": [
+            "ClosePeerExchangeMetric"
+          ]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "event_calendar"
+    },
+    "conversion rate": {
+      "semantic_name": "conv rate",
+      "metric_class": "rate",
+      "default_aggregation": "derived",
+      "derived_formula": "conversions / clicks",
+      "base_metrics": [
+        "conversions",
+        "clicks"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "click through rate": {
+      "semantic_name": "ctr",
+      "metric_class": "rate",
+      "default_aggregation": "derived",
+      "derived_formula": "clicks / impressions",
+      "base_metrics": [
+        "clicks",
+        "impressions"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "cost per click": {
+      "semantic_name": "cpc",
+      "metric_class": "unit_cost",
+      "default_aggregation": "derived",
+      "derived_formula": "cost / clicks",
+      "base_metrics": [
+        "cost",
+        "clicks"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "roi": {
+      "semantic_name": "roi",
+      "metric_class": "rate",
+      "default_aggregation": "derived",
+      "derived_formula": "(profit / cost) * 100",
+      "base_metrics": [
+        "profit",
+        "cost"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
+    "revenue per click": {
+      "semantic_name": "rpc",
+      "metric_class": "rate",
+      "default_aggregation": "derived",
+      "derived_formula": "revenue / clicks",
+      "base_metrics": [
+        "revenue",
+        "clicks"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    }
+  },
+  "grain_catalog": {
+    "campaign": {
+      "none": "campaign",
+      "day": "campaign_calendar"
+    },
+    "ad_group": {
+      "none": "adgroup",
+      "day": "adgroup_calendar"
+    },
+    "adgroup": {
+      "none": "adgroup",
+      "day": "adgroup_calendar"
+    },
+    "event": {
+      "none": "event",
+      "day": "event_calendar"
+    },
+    "order": {
+      "none": "order",
+      "day": "order"
+    },
+    "order_metadata": {
+      "time_column_semantics": "order_date"
+    }
+  },
+  "registry_version": "v1-grain-aware",
+  "aliases": {
+    "profit": [
+      "net profit",
+      "profit margin",
+      "margin",
+      "earnings",
+      "net earnings",
+      "income",
+      "net income",
+      "operating profit",
+      "operating income",
+      "pnl",
+      "p&l",
+      "bottom line"
+    ],
+    "ctr": "click through rate",
+    "cpc": "cost per click",
+    "rpc": "revenue per click",
+    "conv rate": "conversion rate",
+    "cvr": "conversion rate"
+  },
+  "synonyms": {
+    "net profit": "profit",
+    "profit margin": "profit",
+    "margin": "profit",
+    "earnings": "profit",
+    "net earnings": "profit",
+    "income": "profit",
+    "net income": "profit",
+    "operating profit": "profit",
+    "operating income": "profit",
+    "pnl": "profit",
+    "p&l": "profit",
+    "bottom line": "profit",
+    "profit": "profit"
+  },
+  "_build_summary": {
+    "metrics": 18,
+    "derived": 5,
+    "grains": [
+      "adgroup",
+      "adgroup_calendar",
+      "campaign",
+      "campaign_calendar",
+      "event_calendar",
+      "order"
+    ]
+  }
+}

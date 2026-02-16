@@ -1,0 +1,41 @@
+{
+  "grain": "campaign_calendar",
+  "platform": "google_ads",
+  "requested_metrics": [
+    "clicks",
+    "impressions",
+    "cost"
+  ],
+  "chosen_fact_table": "GoogleAdsCampaignPerformanceMetric",
+  "select": [
+    "SUM(fact.[Clicks]) AS [clicks]",
+    "SUM(fact.[Impressions]) AS [impressions]",
+    "SUM(fact.[Cost]) AS [cost]"
+  ],
+  "resolved_metrics": [
+    {
+      "requested_name": "clicks",
+      "canonical_key": "clicks",
+      "fact_table": "GoogleAdsCampaignPerformanceMetric",
+      "select_sql": "SUM(fact.[Clicks]) AS [clicks]",
+      "is_derived": false,
+      "depends_on": []
+    },
+    {
+      "requested_name": "impressions",
+      "canonical_key": "impressions",
+      "fact_table": "GoogleAdsCampaignPerformanceMetric",
+      "select_sql": "SUM(fact.[Impressions]) AS [impressions]",
+      "is_derived": false,
+      "depends_on": []
+    },
+    {
+      "requested_name": "cost",
+      "canonical_key": "cost",
+      "fact_table": "GoogleAdsCampaignPerformanceMetric",
+      "select_sql": "SUM(fact.[Cost]) AS [cost]",
+      "is_derived": false,
+      "depends_on": []
+    }
+  ]
+}

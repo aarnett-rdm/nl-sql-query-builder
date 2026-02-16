@@ -1,0 +1,20 @@
+{
+  "domains": [
+    "ads",
+    "benchmark",
+    "events",
+    "orders",
+    "customer"
+  ],
+  "ads_domain": "ads",
+  "platforms": {
+    "ads": [
+      "google_ads",
+      "microsoft_ads",
+      "meta_ads"
+    ]
+  },
+  "allow_cross_domain": true,
+  "allow_multi_ads_platform": false,
+  "require_explicit_multi_platform_mention": true
+}

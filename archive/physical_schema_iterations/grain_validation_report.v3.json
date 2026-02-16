@@ -1,0 +1,99 @@
+{
+  "summary": {
+    "metrics_checked": 18,
+    "errors": 0,
+    "warnings": 0
+  },
+  "metrics": [
+    {
+      "key": "impressions",
+      "metric": "impressions",
+      "issues": []
+    },
+    {
+      "key": "clicks",
+      "metric": "clicks",
+      "issues": []
+    },
+    {
+      "key": "cost",
+      "metric": "cost",
+      "issues": []
+    },
+    {
+      "key": "conversions",
+      "metric": "conversions",
+      "issues": []
+    },
+    {
+      "key": "revenue",
+      "metric": "revenue",
+      "issues": []
+    },
+    {
+      "key": "commission",
+      "metric": "commission",
+      "issues": []
+    },
+    {
+      "key": "profit",
+      "metric": "profit",
+      "issues": []
+    },
+    {
+      "key": "target roas value",
+      "metric": "troas",
+      "issues": []
+    },
+    {
+      "key": "target cpa value",
+      "metric": "tcpa",
+      "issues": []
+    },
+    {
+      "key": "impression share",
+      "metric": "impression share",
+      "issues": []
+    },
+    {
+      "key": "abs top impression share",
+      "metric": "abs top impression share",
+      "issues": []
+    },
+    {
+      "key": "click share",
+      "metric": "click share",
+      "issues": []
+    },
+    {
+      "key": "exchange revenue",
+      "metric": "exchange revenue",
+      "issues": []
+    },
+    {
+      "key": "conversion rate",
+      "metric": "conv rate",
+      "issues": []
+    },
+    {
+      "key": "click through rate",
+      "metric": "ctr",
+      "issues": []
+    },
+    {
+      "key": "cost per click",
+      "metric": "cpc",
+      "issues": []
+    },
+    {
+      "key": "roi",
+      "metric": "roi",
+      "issues": []
+    },
+    {
+      "key": "revenue per click",
+      "metric": "rpc",
+      "issues": []
+    }
+  ]
+}

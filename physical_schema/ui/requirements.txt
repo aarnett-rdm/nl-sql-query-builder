@@ -1,0 +1,5 @@
+streamlit>=1.30
+requests>=2.31
+pyodbc>=4.0.39
+azure-identity>=1.13.0
+pandas>=1.5.0

@@ -1,0 +1,13 @@
+{
+  "campaign_filter_candidates": [
+    {
+      "table": "GoogleAdsCampaign",
+      "column": "CampaignName"
+    },
+    {
+      "table": "GoogleAdsCampaignPerformanceMetric",
+      "column": "CampaignName"
+    }
+  ],
+  "campaign_free_text_enabled": true
+}

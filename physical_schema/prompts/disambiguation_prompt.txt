@@ -1,0 +1,12 @@
+The user asked: "{question}"
+
+The column "{column}" exists in multiple tables:
+{candidates}
+
+Based on the user's question and the context of the tables above, which table is the most appropriate source for "{column}"?
+
+Respond with ONLY a JSON object:
+{{"chosen_table": "<full_table_name>", "reason": "<brief explanation>"}}
+
+If you cannot determine the correct table, respond with:
+{{"chosen_table": null, "reason": "<why it's ambiguous>"}}

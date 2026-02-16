@@ -1,0 +1,70 @@
+{
+  "generated_at_utc": "2025-12-23T17:36:29Z",
+  "summary": {
+    "errors": 1,
+    "warnings": 2,
+    "info": 0
+  },
+  "errors": [
+    {
+      "type": "missing_filter_column",
+      "filter": "campaign",
+      "table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+      "column": "CampaignName"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "ambiguous_table_name",
+      "metric": "commission",
+      "table": "Order",
+      "candidates": [
+        "GoTicketsBronze.Order",
+        "GoTicketsCoreEntity.Order"
+      ]
+    },
+    {
+      "type": "ambiguous_preferred_fact_table",
+      "metric": "commission",
+      "table": "Order",
+      "candidates": [
+        "GoTicketsBronze.Order",
+        "GoTicketsCoreEntity.Order"
+      ],
+      "grain": "order",
+      "platform": "gotickets"
+    }
+  ],
+  "suggestions": [
+    {
+      "action": "update_filter_config",
+      "path": "campaign_filter_candidates",
+      "current": {
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "column": "CampaignName"
+      },
+      "recommended_candidates": [
+        {
+          "table": "GoTicketsCoreEntity.GoogleAdsCampaign",
+          "column": "CampaignName"
+        },
+        {
+          "table": "GoTicketsCoreEntity.MicrosoftAdsCampaign",
+          "column": "CampaignName"
+        },
+        {
+          "table": "GoogleAdsBronze.Campaign",
+          "column": "CampaignName"
+        }
+      ],
+      "reason": "CampaignName does not exist on *CampaignPerformanceMetric fact tables; it exists on campaign dimension tables."
+    },
+    {
+      "action": "fully_qualify_table_in_metric_registry",
+      "metric": "commission",
+      "table": "Order",
+      "recommended": "GoTicketsCoreEntity.Order",
+      "reason": "Order is ambiguous; only GoTicketsCoreEntity.Order contains TotalEstimatedCommission (used by commission metric)."
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"id": "table:GoTicketsAuctionInsightMetric", "type": "table_summary", "tables": ["GoTicketsAuctionInsightMetric"], "platforms": ["generic"], "body": "GoTicketsAuctionInsightMetric comes from the GoTicketsAuctionInsightMetric family. Platform: generic. Description: GoogleAdsAdGroupAuctionInsightMetric Includes example data from the change stream."}

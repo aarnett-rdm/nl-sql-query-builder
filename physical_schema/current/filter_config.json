@@ -1,0 +1,19 @@
+{
+  "campaign_filter_candidates": [
+    {
+      "table": "GoogleAdsCampaign",
+      "column": "CampaignName",
+      "operator": "contains",
+      "sql_expr": "LOWER({column}) LIKE LOWER({value})",
+      "value_template": "%{value}%"
+    },
+    {
+      "table": "MicrosoftAdsCampaign",
+      "column": "CampaignName",
+      "operator": "contains",
+      "sql_expr": "LOWER({column}) LIKE LOWER({value})",
+      "value_template": "%{value}%"
+    }
+  ],
+  "campaign_free_text_enabled": true
+}

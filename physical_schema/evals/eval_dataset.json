@@ -1,0 +1,314 @@
+{
+  "version": "1.0",
+  "description": "Golden evaluation dataset for NL-to-SQL parser comparison (25 entries)",
+  "date_filter_type_taxonomy": {
+    "yesterday": "filters.date.yesterday == true",
+    "last_n_days": "filters.date.last_n_days is set",
+    "date_range": "filters.date.date_from and/or date_to set",
+    "mtd": "filters.date.mtd == true",
+    "none": "no date filter present",
+    "null": "skip scoring (any value acceptable)"
+  },
+  "entries": [
+    {
+      "id": "basic_spend_yesterday",
+      "question": "What was our total spend yesterday?",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "yesterday"
+      },
+      "tags": ["basic", "synonym", "parity"]
+    },
+    {
+      "id": "profit_last_7d",
+      "question": "Show profit last 7 days",
+      "expected": {
+        "metrics": ["profit"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["basic", "parity"]
+    },
+    {
+      "id": "clicks_by_campaign_30d",
+      "question": "Show clicks by campaign last 30 days",
+      "expected": {
+        "metrics": ["clicks"],
+        "platform": null,
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["basic", "dimension", "parity"]
+    },
+    {
+      "id": "google_impressions_by_account_mtd",
+      "question": "Google ads impressions by account this month",
+      "expected": {
+        "metrics": ["impressions"],
+        "platform": "google_ads",
+        "dimensions": ["AccountName"],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["platform", "dimension", "parity"]
+    },
+    {
+      "id": "msft_cost_campaign_yesterday",
+      "question": "Microsoft ads cost by campaign yesterday",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": "microsoft_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "yesterday"
+      },
+      "tags": ["platform", "dimension", "parity"]
+    },
+    {
+      "id": "ctr_by_campaign_msft",
+      "question": "What is our CTR by campaign for microsoft ads?",
+      "expected": {
+        "metrics": ["click through rate"],
+        "platform": "microsoft_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": null
+      },
+      "tags": ["derived", "platform", "synonym", "parity"]
+    },
+    {
+      "id": "conv_rate_by_campaign_30d",
+      "question": "Show conversion rate by campaign last 30 days",
+      "expected": {
+        "metrics": ["conversion rate"],
+        "platform": null,
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["derived", "dimension", "parity"]
+    },
+    {
+      "id": "multi_metric_google_7d",
+      "question": "Show clicks, cost, profit by campaign for google ads last 7 days",
+      "expected": {
+        "metrics": ["clicks", "cost", "profit"],
+        "platform": "google_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["multi_metric", "platform", "parity"]
+    },
+    {
+      "id": "multi_metric_campaign_filter",
+      "question": "Show clicks, cost, profit for campaigns containing 'MLB' last 30 days",
+      "expected": {
+        "metrics": ["clicks", "cost", "profit"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["multi_metric", "filter"]
+    },
+    {
+      "id": "impressions_by_campaign_this_month",
+      "question": "Show impressions by campaign this month",
+      "expected": {
+        "metrics": ["impressions"],
+        "platform": null,
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["basic", "dimension"]
+    },
+    {
+      "id": "google_impressions_by_campaign",
+      "question": "Google ads impressions by campaign this month",
+      "expected": {
+        "metrics": ["impressions"],
+        "platform": "google_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["platform", "dimension"]
+    },
+    {
+      "id": "msft_cost_by_campaign",
+      "question": "Microsoft ads cost by campaign yesterday",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": "microsoft_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "yesterday"
+      },
+      "tags": ["platform", "dimension"]
+    },
+    {
+      "id": "cpc_google_7d",
+      "question": "Cost per click for google ads last 7 days",
+      "expected": {
+        "metrics": ["cost per click"],
+        "platform": "google_ads",
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["derived", "platform"]
+    },
+    {
+      "id": "cost_where_state_texas",
+      "question": "Show cost where state is Texas",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": null
+      },
+      "tags": ["filter", "where"]
+    },
+    {
+      "id": "clicks_where_status_active",
+      "question": "Show clicks where status is active",
+      "expected": {
+        "metrics": ["clicks"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": null
+      },
+      "tags": ["filter", "where"]
+    },
+    {
+      "id": "revenue_campaigns_super_bowl",
+      "question": "Show revenue for campaigns containing 'super bowl'",
+      "expected": {
+        "metrics": ["revenue"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": null
+      },
+      "tags": ["filter", "campaign"]
+    },
+    {
+      "id": "profit_campaigns_spring_training_30d",
+      "question": "Show profit for campaigns containing 'spring training' last 30 days",
+      "expected": {
+        "metrics": ["profit"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["filter", "campaign"]
+    },
+    {
+      "id": "cross_platform_clicks",
+      "question": "Compare Google vs Microsoft clicks by campaign last 30 days",
+      "expected": {
+        "metrics": ["clicks"],
+        "platform": null,
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["comparison"]
+    },
+    {
+      "id": "pop_cost_7d",
+      "question": "Compare cost last 7 days vs prior 7 days",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["comparison"]
+    },
+    {
+      "id": "profit_q1_2025",
+      "question": "Show profit for Q1 2025",
+      "expected": {
+        "metrics": ["profit"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["date_range"]
+    },
+    {
+      "id": "clicks_ytd",
+      "question": "Show clicks YTD",
+      "expected": {
+        "metrics": ["clicks"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["date_range"]
+    },
+    {
+      "id": "impressions_last_month",
+      "question": "Show impressions last month",
+      "expected": {
+        "metrics": ["impressions"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["date_range"]
+    },
+    {
+      "id": "cost_last_quarter",
+      "question": "Show cost last quarter",
+      "expected": {
+        "metrics": ["cost"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "date_range"
+      },
+      "tags": ["date_range"]
+    },
+    {
+      "id": "exchange_revenue_30d",
+      "question": "Show exchange revenue last 30 days",
+      "expected": {
+        "metrics": ["exchange revenue"],
+        "platform": null,
+        "dimensions": [],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["basic"]
+    },
+    {
+      "id": "four_metrics_google_campaign",
+      "question": "Show clicks, impressions, cost, revenue by campaign for google ads last 7 days",
+      "expected": {
+        "metrics": ["clicks", "impressions", "cost", "revenue"],
+        "platform": "google_ads",
+        "dimensions": ["CampaignName"],
+        "grain": null,
+        "date_filter_type": "last_n_days"
+      },
+      "tags": ["multi_metric", "platform"]
+    }
+  ]
+}

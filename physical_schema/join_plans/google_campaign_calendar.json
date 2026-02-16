@@ -1,0 +1,99 @@
+{
+  "fact_table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+  "targets": [
+    "Utility.DimCalendar",
+    "GoTicketsCoreEntity.GoogleAdsCampaign"
+  ],
+  "platform": "google_ads",
+  "join_steps": [
+    {
+      "left_table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+      "right_table": "Utility.DimCalendar",
+      "left_columns": [
+        "CalendarId"
+      ],
+      "right_columns": [
+        "CalendarId"
+      ],
+      "confidence": "high",
+      "evidence": {
+        "rule": "calendarid_to_dimcalendar"
+      }
+    },
+    {
+      "left_table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+      "right_table": "GoTicketsCoreEntity.GoogleAdsCampaign",
+      "left_columns": [
+        "CampaignId"
+      ],
+      "right_columns": [
+        "CampaignId"
+      ],
+      "confidence": "high",
+      "evidence": {
+        "rule": "platform_dim_preference",
+        "platform": "google_ads",
+        "preferred": "GoTicketsCoreEntity.GoogleAdsCampaign",
+        "candidates_filtered_for_platform": [
+          "GoTicketsBiddingMetric.GoogleAdsCampaignBidChangeHistory",
+          "GoTicketsAdManagementBronze.GoogleAdsCampaignPerVenueAttributes",
+          "GoTicketsAdManagementBronze.GoogleAdsCampaignPerPerformerAttributes",
+          "GoTicketsAdManagementBronze.GoogleAdsCampaignPerEventClusterAttributes",
+          "GoTicketsEntityMap.GoogleAdsCampaignMap",
+          "GoogleAdsBronze.Campaign",
+          "GoTicketsMembership.GoogleAdsCampaignMembership",
+          "GoTicketsCoreEntity.GoogleAdsCampaign",
+          "GoTicketsBiddingMetric.GoogleAdsCampaignBidChange"
+        ]
+      }
+    }
+  ],
+  "missing": [],
+  "paths": {
+    "Utility.DimCalendar": [
+      {
+        "from_table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+        "to_table": "Utility.DimCalendar",
+        "from_columns": [
+          "CalendarId"
+        ],
+        "to_columns": [
+          "CalendarId"
+        ],
+        "confidence": "high",
+        "evidence": {
+          "rule": "calendarid_to_dimcalendar"
+        }
+      }
+    ],
+    "GoTicketsCoreEntity.GoogleAdsCampaign": [
+      {
+        "from_table": "GoTicketsPerformanceMetric.GoogleAdsCampaignPerformanceMetric",
+        "to_table": "GoTicketsCoreEntity.GoogleAdsCampaign",
+        "from_columns": [
+          "CampaignId"
+        ],
+        "to_columns": [
+          "CampaignId"
+        ],
+        "confidence": "high",
+        "evidence": {
+          "rule": "platform_dim_preference",
+          "platform": "google_ads",
+          "preferred": "GoTicketsCoreEntity.GoogleAdsCampaign",
+          "candidates_filtered_for_platform": [
+            "GoTicketsBiddingMetric.GoogleAdsCampaignBidChangeHistory",
+            "GoTicketsAdManagementBronze.GoogleAdsCampaignPerVenueAttributes",
+            "GoTicketsAdManagementBronze.GoogleAdsCampaignPerPerformerAttributes",
+            "GoTicketsAdManagementBronze.GoogleAdsCampaignPerEventClusterAttributes",
+            "GoTicketsEntityMap.GoogleAdsCampaignMap",
+            "GoogleAdsBronze.Campaign",
+            "GoTicketsMembership.GoogleAdsCampaignMembership",
+            "GoTicketsCoreEntity.GoogleAdsCampaign",
+            "GoTicketsBiddingMetric.GoogleAdsCampaignBidChange"
+          ]
+        }
+      }
+    ]
+  }
+}

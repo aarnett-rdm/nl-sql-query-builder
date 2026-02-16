@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+*.cover
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Feedback data (user corrections - may contain sensitive queries)
+physical_schema/feedback/*.jsonl
+physical_schema/feedback/corrections.jsonl
+physical_schema/feedback/RECOMMENDATIONS.md
+
+# Eval run outputs (keep dataset, exclude runs)
+physical_schema/evals/run_*.json
+
+# Logs
+*.log
+logs/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Claude Code project files (optional - these are user-specific)
+.claude/
+
+# Archive (old code - optional, uncomment if you don't want to track)
+# archive/
+
+# Project-specific (uncomment if you have these)
+# *.pdf
+# *.xlsx
+# *.csv

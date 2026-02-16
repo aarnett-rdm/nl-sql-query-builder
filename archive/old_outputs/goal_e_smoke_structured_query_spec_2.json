@@ -1,0 +1,225 @@
+{
+  "request_metadata": {
+    "request_id": "req-demo-mlb-0001",
+    "nl_query": "For June 2025, for all Google Ads campaigns that contain 'Taylor Swift' in the name, show clicks, cost, revenue, commission, and conversion rate, ordered by revenue descending, limit 50.",
+    "generated_at_utc": null,
+    "user_locale": "en-US",
+    "warehouse_dialect": "tsql",
+    "default_platform": "google_ads",
+    "default_time_zone": "America/Los_Angeles"
+  },
+  "interpretation": {
+    "intent_type": "metric_breakdown",
+    "primary_subject": "For June 2025, for all Google Ads campaigns that contain 'Taylor Swift' in the name, show clicks, cost, revenue, commission, and conversion rate, ordered by revenue descending, limit 50.",
+    "focus_entities": [
+      {
+        "entity_type": "campaign",
+        "resolution_status": "explicit"
+      }
+    ],
+    "question_time_scope": "fixed_range",
+    "clarity_score": 0.85,
+    "notes": [
+      "Raw filter-like phrases: [\"for all google ads campaigns that contain 'taylor swift' in the name\", 'for june 2025', 'in the name']",
+      "Raw entity candidates: ['For June', 'Google Ads', 'Taylor Swift']",
+      "Initial platform guess: ['google_ads']"
+    ]
+  },
+  "logical_query": {
+    "platform": {
+      "requested": [
+        "google_ads"
+      ],
+      "resolved": [
+        "google_ads"
+      ],
+      "enum_valid": true
+    },
+    "grain": {
+      "entity_grain": "campaign",
+      "time_grain": "none",
+      "explanation": "Inferred entity grain=campaign from question text."
+    },
+    "metrics": [
+      {
+        "semantic_name": "clicks",
+        "alias": "clicks",
+        "metric_class": "performance",
+        "aggregation": "sum",
+        "resolved_columns": [
+          {
+            "table": "GoogleAdsCampaignPerformanceMetric",
+            "column": "Clicks"
+          }
+        ],
+        "derived_expression": null,
+        "platform_constraints": [],
+        "required": true,
+        "confidence": 1.0
+      },
+      {
+        "semantic_name": "cost",
+        "alias": "cost",
+        "metric_class": "cost",
+        "aggregation": "sum",
+        "resolved_columns": [
+          {
+            "table": "GoogleAdsCampaignPerformanceMetric",
+            "column": "Cost"
+          }
+        ],
+        "derived_expression": null,
+        "platform_constraints": [],
+        "required": true,
+        "confidence": 1.0
+      },
+      {
+        "semantic_name": "revenue",
+        "alias": "revenue",
+        "metric_class": "revenue",
+        "aggregation": "sum",
+        "resolved_columns": [
+          {
+            "table": "GoogleAdsCampaignPerformanceMetric",
+            "column": "TotalRevenue"
+          }
+        ],
+        "derived_expression": null,
+        "platform_constraints": [],
+        "required": true,
+        "confidence": 1.0
+      }
+    ],
+    "dimensions": [
+      {
+        "semantic_name": "campaign",
+        "alias": "campaign",
+        "role": "group_by",
+        "resolved_columns": [
+          {
+            "table": "GoogleAdsAdGroupAuctionInsightMetric",
+            "column": "CampaignId"
+          }
+        ],
+        "grain_alignment": null,
+        "time_grain": "none",
+        "confidence": 1.0
+      }
+    ],
+    "time_window": {
+      "semantic_role": "activity",
+      "field": {
+        "semantic_name": "activity_date",
+        "resolved_column": {
+          "table": "DimCalendar",
+          "column": "PST_Date"
+        }
+      },
+      "absolute": {
+        "start_date": "2025-06-01",
+        "end_date": "2025-06-30"
+      },
+      "relative": null,
+      "time_zone": "America/Los_Angeles"
+    },
+    "filters": [],
+    "sorting": [
+      {
+        "field_type": "metric",
+        "semantic_name": "cost",
+        "direction": "desc",
+        "nulls": "last"
+      }
+    ],
+    "limit": {
+      "value": 100,
+      "applied": true,
+      "reason": "Default limit applied by planner."
+    }
+  },
+  "physical_plan": {
+    "fact_tables": [
+      {
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "schema_ref": "semantic_schema.json#GoogleAdsCampaignPerformanceMetric",
+        "table_type": "dimension",
+        "platform": "google_ads",
+        "grain": "campaign_calendar",
+        "reason": "Selected as primary fact table based on metrics ['clicks', 'cost', 'revenue'] and score 22.00."
+      }
+    ],
+    "dimension_tables": [
+      {
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "role": "fact_dimension",
+        "reason": "Dimension lives directly on fact table."
+      }
+    ],
+    "join_path": {
+      "primary_graph": [],
+      "shortest_path_preference": "via_core_entities",
+      "platform_specific_overrides": []
+    },
+    "group_by": [
+      {
+        "table": "GoogleAdsAdGroupAuctionInsightMetric",
+        "column": "CampaignId",
+        "alias": "campaign"
+      }
+    ],
+    "select_list": [
+      {
+        "expression_type": "dimension",
+        "table": "GoogleAdsAdGroupAuctionInsightMetric",
+        "column": "CampaignId",
+        "alias": "campaign"
+      },
+      {
+        "expression_type": "metric",
+        "aggregation": "AVG",
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "column": "Clicks",
+        "alias": "clicks"
+      },
+      {
+        "expression_type": "metric",
+        "aggregation": "SUM",
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "column": "Cost",
+        "alias": "cost"
+      },
+      {
+        "expression_type": "metric",
+        "aggregation": "SUM",
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "column": "TotalRevenue",
+        "alias": "revenue"
+      }
+    ],
+    "where_clauses": [
+      {
+        "predicate_type": "time_range_relative",
+        "table": "GoogleAdsCampaignPerformanceMetric",
+        "column": "ChangedTimestampUtc",
+        "relative": null,
+        "source_filter": "time_window"
+      }
+    ],
+    "order_by": [
+      {
+        "expression": "cost",
+        "direction": "desc",
+        "source": "logical_query.sorting"
+      }
+    ]
+  },
+  "validation": {
+    "is_semantically_valid": true,
+    "errors": [],
+    "warnings": [],
+    "confidence_scores": {},
+    "needs_clarification": false,
+    "clarification_questions": [],
+    "llm_notes": []
+  }
+}

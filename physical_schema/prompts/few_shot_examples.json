@@ -1,0 +1,208 @@
+[
+  {
+    "question": "Show clicks by campaign last 7 days",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["clicks"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    }
+  },
+  {
+    "question": "What was our total spend yesterday for Google campaigns?",
+    "spec": {
+      "grain": null,
+      "platform": "google_ads",
+      "metrics": ["cost"],
+      "dimensions": [],
+      "filters": {
+        "date": {"yesterday": true},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    }
+  },
+  {
+    "question": "Show impressions, clicks, and conversion rate by campaign for Microsoft Ads last 30 days",
+    "spec": {
+      "grain": null,
+      "platform": "microsoft_ads",
+      "metrics": ["impressions", "clicks", "conversion rate"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 30},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    }
+  },
+  {
+    "question": "Show me cost, clicks, profit and exchange revenue for all Google spring training campaigns by campaign for January 2026",
+    "spec": {
+      "grain": null,
+      "platform": "google_ads",
+      "metrics": ["cost", "clicks", "profit", "exchange revenue"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"date_from": "2026-01-01", "date_to": "2026-01-31"},
+        "campaign": {"terms": ["spring training"], "mode": "any"},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "Named month 'January 2026' -> date_from/date_to. 'spring training campaigns' -> campaign filter without explicit 'containing'."
+  },
+  {
+    "question": "How much did we spend on super bowl campaigns in Google last month?",
+    "spec": {
+      "grain": null,
+      "platform": "google_ads",
+      "metrics": ["cost"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"date_from": "2026-01-01", "date_to": "2026-01-31"},
+        "campaign": {"terms": ["super bowl"], "mode": "any"},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "'last month' computed from current date. 'super bowl campaigns' -> campaign filter."
+  },
+  {
+    "question": "Show me clicks and cost for campaigns containing 'spring training' last 7 days",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["clicks", "cost"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "campaign": {"terms": ["spring training"], "mode": "any"},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    }
+  },
+  {
+    "question": "Show revenue by account where state is Minnesota month to date",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["revenue"],
+      "dimensions": ["AccountName"],
+      "filters": {
+        "date": {"mtd": true},
+        "where": [{"field": "State", "op": "=", "value": "Minnesota", "case_insensitive": true}]
+      },
+      "compare": null,
+      "clarifications": []
+    }
+  },
+  {
+    "question": "What are the top campaigns by profit this quarter?",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["profit"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"date_from": "2026-01-01", "date_to": "2026-02-08"},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "date_from/date_to are computed for 'this quarter' at query time - LLM should use current date context"
+  },
+  {
+    "question": "Compare Google vs Microsoft clicks by campaign last 7 days",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["clicks"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "where": []
+      },
+      "compare": {
+        "type": "cross_platform",
+        "metrics": ["clicks"]
+      },
+      "clarifications": []
+    }
+  },
+  {
+    "question": "Show me cost vs prior period by campaign last 7 days Google",
+    "spec": {
+      "grain": null,
+      "platform": "google_ads",
+      "metrics": ["cost"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "where": []
+      },
+      "compare": {
+        "type": "period_over_period",
+        "metric": "cost",
+        "current": {"last_n_days": 7, "offset_days": 0},
+        "prior": {"last_n_days": 7, "offset_days": 7}
+      },
+      "clarifications": []
+    }
+  },
+  {
+    "question": "Show me the revenue data",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["revenue"],
+      "dimensions": [],
+      "filters": {
+        "date": {},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": [
+        {
+          "field": "dimensions",
+          "reason": "No grouping specified.",
+          "question": "How would you like the revenue broken down? By campaign, account, or just a total?"
+        }
+      ]
+    }
+  },
+  {
+    "question": "Show me the performance",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": [],
+      "dimensions": [],
+      "filters": {
+        "date": {},
+        "where": []
+      },
+      "compare": null,
+      "clarifications": [
+        {
+          "field": "metrics",
+          "reason": "No specific metrics identified.",
+          "question": "Which metrics do you want? Options include: clicks, impressions, cost, revenue, profit, conversions, conversion rate, CTR, CPC, ROI."
+        }
+      ]
+    }
+  }
+]
