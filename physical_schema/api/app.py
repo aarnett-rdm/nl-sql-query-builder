@@ -32,6 +32,7 @@ from tools.exceptions import (
     SpecValidationError,
 )
 from tools.feedback_store import CorrectionRecord, FeedbackStore, VALID_TYPES
+from tools.feedback_analyzer import generate_recommendations, generate_feedback_log
 from tools.llm_adapter import LLMAdapter, build_llm_adapter
 
 
@@ -778,6 +779,32 @@ def continue_query(
     )
 
 
+def _regenerate_feedback_markdown():
+    """Regenerate RECOMMENDATIONS.md and FEEDBACK_LOG.md from feedback store."""
+    try:
+        records = _feedback_store.load_all()
+        if not records:
+            return
+
+        project_root = Path(__file__).resolve().parents[1]
+        feedback_dir = project_root / "feedback"
+        feedback_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate RECOMMENDATIONS.md
+        recommendations_md = generate_recommendations(records, min_count=1)
+        recommendations_path = feedback_dir / "RECOMMENDATIONS.md"
+        recommendations_path.write_text(recommendations_md, encoding="utf-8")
+
+        # Generate FEEDBACK_LOG.md
+        feedback_log_md = generate_feedback_log(records, max_recent=50)
+        feedback_log_path = feedback_dir / "FEEDBACK_LOG.md"
+        feedback_log_path.write_text(feedback_log_md, encoding="utf-8")
+
+        _log_json("feedback_markdown_regenerated", record_count=len(records))
+    except Exception as e:
+        _log_json("feedback_markdown_regeneration_failed", error=str(e))
+
+
 @app.post("/feedback", response_model=FeedbackResponse)
 def submit_feedback(req: FeedbackRequest):
     """Record a user correction for pattern analysis."""
@@ -798,6 +825,12 @@ def submit_feedback(req: FeedbackRequest):
         feedback_id=record.feedback_id,
         correction_type=req.correction_type,
     )
+
+    # Auto-regenerate markdown files every 5 feedback submissions
+    all_records = _feedback_store.load_all()
+    if len(all_records) % 5 == 0:
+        _regenerate_feedback_markdown()
+
     return FeedbackResponse(feedback_id=record.feedback_id)
 
 

@@ -96,6 +96,31 @@ def post_continue(spec: dict, answers: dict) -> dict:
     return r.json()
 
 
+def post_feedback(
+    request_id: str,
+    original_question: str,
+    original_spec: dict,
+    corrected_spec: dict,
+    correction_type: str,
+    notes: str = "",
+) -> dict:
+    """POST /feedback with user correction."""
+    r = requests.post(
+        f"{get_api_url()}/feedback",
+        json={
+            "request_id": request_id,
+            "original_question": original_question,
+            "original_spec": original_spec,
+            "corrected_spec": corrected_spec,
+            "correction_type": correction_type,
+            "notes": notes,
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 # Results formatting is now in ui/shared.py
 
 
@@ -149,6 +174,104 @@ def render_sidebar():
 
 
 # ---------------------------------------------------------------------------
+# Feedback UI
+# ---------------------------------------------------------------------------
+
+def render_feedback_ui(msg: dict, idx: int):
+    """Render feedback buttons and correction form for a message with SQL."""
+    # Skip if feedback already submitted
+    if msg.get("feedback_submitted"):
+        st.caption("✅ Thank you for your feedback!")
+        return
+
+    # Get the original question (look back in messages for user message)
+    original_question = ""
+    for i in range(idx - 1, -1, -1):
+        if st.session_state.messages[i]["role"] == "user":
+            original_question = st.session_state.messages[i]["content"]
+            break
+
+    st.divider()
+
+    col1, col2, col3 = st.columns([1, 1, 8])
+    with col1:
+        thumbs_up = st.button("👍 Correct", key=f"thumbs_up_{idx}", use_container_width=True)
+    with col2:
+        thumbs_down = st.button("👎 Wrong", key=f"thumbs_down_{idx}", use_container_width=True)
+
+    if thumbs_up:
+        msg["feedback_submitted"] = True
+        st.success("✅ Thanks! Glad it worked.")
+        st.rerun()
+
+    if thumbs_down or msg.get("show_feedback_form"):
+        msg["show_feedback_form"] = True
+
+        with st.expander("🔧 Help us improve", expanded=True):
+            st.caption("Tell us what was wrong so we can fix it:")
+
+            # Correction type selection
+            correction_type_map = {
+                "Wrong metrics": "metric_mismatch",
+                "Wrong dimensions/columns": "dimension_wrong",
+                "Wrong platform (Google/Microsoft)": "platform_wrong",
+                "Wrong date range": "date_filter_wrong",
+                "Wrong filters": "filter_wrong",
+                "Other": "other",
+            }
+
+            correction_type_display = st.selectbox(
+                "What was wrong?",
+                options=list(correction_type_map.keys()),
+                key=f"correction_type_{idx}",
+            )
+            correction_type = correction_type_map[correction_type_display]
+
+            # Free-form notes
+            notes = st.text_area(
+                "What should it have been? (optional but helpful)",
+                placeholder="E.g., 'Should use revenue metric instead of impressions' or 'Date should be last month not last week'",
+                key=f"notes_{idx}",
+                height=100,
+            )
+
+            # Submit button
+            col_submit, col_cancel = st.columns([1, 1])
+            with col_submit:
+                if st.button("Submit Feedback", key=f"submit_feedback_{idx}", type="primary", use_container_width=True):
+                    # Get spec and request_id from message (if available)
+                    spec = msg.get("spec", {})
+                    request_id = msg.get("request_id", "")
+
+                    if not spec:
+                        st.error("Cannot submit feedback: no spec available.")
+                    else:
+                        try:
+                            # For now, corrected_spec is same as original (user provides notes)
+                            # In future, could have UI to edit the spec
+                            feedback_resp = post_feedback(
+                                request_id=request_id,
+                                original_question=original_question,
+                                original_spec=spec,
+                                corrected_spec=spec,  # TODO: allow editing
+                                correction_type=correction_type,
+                                notes=notes,
+                            )
+                            msg["feedback_submitted"] = True
+                            msg["show_feedback_form"] = False
+                            st.success(f"✅ Feedback submitted! ID: {feedback_resp.get('feedback_id', '')[:8]}")
+                            st.caption("Your feedback will help improve the system. Thank you!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to submit feedback: {e}")
+
+            with col_cancel:
+                if st.button("Cancel", key=f"cancel_feedback_{idx}", use_container_width=True):
+                    msg["show_feedback_form"] = False
+                    st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Chat rendering
 # ---------------------------------------------------------------------------
 
@@ -180,6 +303,10 @@ def render_chat_history():
             if msg.get("error_detail"):
                 with st.expander("Error details"):
                     st.json(msg["error_detail"])
+
+            # Feedback UI (only for assistant messages with SQL)
+            if msg["role"] == "assistant" and msg.get("sql"):
+                render_feedback_ui(msg, idx)
 
 
 def render_run_query(msg: dict, idx: int, sql: str | None = None):
@@ -218,12 +345,22 @@ def append_user_message(text: str):
     st.session_state.messages.append({"role": "user", "content": text})
 
 
-def append_assistant_message(content: str, sql: str | None = None, error_detail=None):
+def append_assistant_message(
+    content: str,
+    sql: str | None = None,
+    error_detail=None,
+    spec: dict | None = None,
+    request_id: str | None = None,
+):
     msg = {"role": "assistant", "content": content}
     if sql:
         msg["sql"] = sql
     if error_detail:
         msg["error_detail"] = error_detail
+    if spec:
+        msg["spec"] = spec
+    if request_id:
+        msg["request_id"] = request_id
     st.session_state.messages.append(msg)
 
 
@@ -296,7 +433,7 @@ def handle_query_response(data: dict):
             meta_parts.append(f"Parser: {parser}")
         meta = "  \n".join(meta_parts)
         content = "Here's your query:" + (f"\n\n{meta}" if meta else "")
-        append_assistant_message(content, sql=sql)
+        append_assistant_message(content, sql=sql, spec=spec, request_id=request_id)
 
     elif clars:
         # Need clarification

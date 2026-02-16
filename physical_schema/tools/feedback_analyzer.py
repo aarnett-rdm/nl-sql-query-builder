@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -293,22 +294,112 @@ def generate_recommendations(
     return "\n".join(lines)
 
 
+def generate_feedback_log(records: List[CorrectionRecord], max_recent: int = 50) -> str:
+    """Generate a human-readable FEEDBACK_LOG.md for uploading to Claude Code."""
+    if not records:
+        return (
+            "# Feedback Log\n\n"
+            "No feedback submitted yet.\n"
+        )
+
+    lines: List[str] = ["# Feedback Log\n"]
+    lines.append(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+
+    # Summary stats
+    type_counts: Counter = Counter(r.correction_type for r in records)
+    timestamps = [r.timestamp for r in records]
+
+    # Count this week
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+    week_count = sum(1 for r in records if r.timestamp >= week_ago.isoformat())
+
+    lines.append("## Summary\n")
+    lines.append(f"- **Total feedback:** {len(records)}")
+    lines.append(f"- **This week:** {week_count}")
+    lines.append(f"- **Date range:** {min(timestamps)[:10]} to {max(timestamps)[:10]}")
+    lines.append(f"- **Most common:** {', '.join(f'{ct} ({cnt})' for ct, cnt in type_counts.most_common(3))}")
+    lines.append("")
+
+    # Recent feedback (newest first)
+    lines.append(f"## Recent Feedback (Last {min(max_recent, len(records))})\n")
+
+    for r in reversed(records[-max_recent:]):
+        # Format correction type as title case
+        corr_type_display = r.correction_type.replace("_", " ").title()
+
+        lines.append(f"### [{r.timestamp[:16]}] {corr_type_display} - ID: {r.feedback_id[:8]}")
+        lines.append(f"**User Question:** \"{r.original_question}\"")
+        lines.append("")
+
+        # What the system did
+        lines.append("**What the system did:**")
+        orig_spec = r.original_spec
+        lines.append(f"- **Metrics:** {', '.join(orig_spec.get('metrics', [])) or '(none)'}")
+        lines.append(f"- **Platform:** {orig_spec.get('platform', '(none)')}")
+        lines.append(f"- **Dimensions:** {', '.join(orig_spec.get('dimensions', [])) or '(none)'}")
+        date_filter = orig_spec.get("filters", {}).get("date", {})
+        if date_filter:
+            lines.append(f"- **Date:** {_format_date_filter(date_filter)}")
+        lines.append("")
+
+        # What it should have been (if different)
+        corr_spec = r.corrected_spec
+        if corr_spec != orig_spec:
+            lines.append("**What it should have been:**")
+            if corr_spec.get("metrics") != orig_spec.get("metrics"):
+                lines.append(f"- **Metrics:** {', '.join(corr_spec.get('metrics', []))}")
+            if corr_spec.get("platform") != orig_spec.get("platform"):
+                lines.append(f"- **Platform:** {corr_spec.get('platform')}")
+            if corr_spec.get("dimensions") != orig_spec.get("dimensions"):
+                lines.append(f"- **Dimensions:** {', '.join(corr_spec.get('dimensions', []))}")
+            corr_date = corr_spec.get("filters", {}).get("date", {})
+            if corr_date != date_filter:
+                lines.append(f"- **Date:** {_format_date_filter(corr_date)}")
+            lines.append("")
+
+        # User notes
+        if r.notes:
+            lines.append(f"**User Notes:** \"{r.notes}\"")
+            lines.append("")
+
+        lines.append("---\n")
+
+    return "\n".join(lines)
+
+
+def _format_date_filter(date_filter: Dict[str, Any]) -> str:
+    """Format a date filter dict as a human-readable string."""
+    if not date_filter:
+        return "(none)"
+    if "preset" in date_filter:
+        return f"preset: {date_filter['preset']}"
+    if "relative" in date_filter:
+        rel = date_filter["relative"]
+        return f"relative: {rel.get('offset', 0)} {rel.get('unit', 'days')}"
+    if "start" in date_filter and "end" in date_filter:
+        return f"{date_filter['start']} to {date_filter['end']}"
+    return str(date_filter)
+
+
 # ---------------------------------------------------------------------------
 # CLI entrypoint
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Feedback Analyzer — generates RECOMMENDATIONS.md")
+    ap = argparse.ArgumentParser(
+        description="Feedback Analyzer — generates RECOMMENDATIONS.md and FEEDBACK_LOG.md"
+    )
     ap.add_argument(
         "--input",
         default=None,
         help="Path to corrections.jsonl (default: feedback/corrections.jsonl)",
     )
     ap.add_argument(
-        "--output",
+        "--output-dir",
         default=None,
-        help="Path for RECOMMENDATIONS.md (default: feedback/RECOMMENDATIONS.md)",
+        help="Directory for output files (default: feedback/)",
     )
     ap.add_argument(
         "--min-count",
@@ -316,11 +407,17 @@ def main() -> None:
         default=1,
         help="Minimum occurrences before recommending (default: 1)",
     )
+    ap.add_argument(
+        "--max-recent",
+        type=int,
+        default=50,
+        help="Maximum recent feedback items in log (default: 50)",
+    )
     args = ap.parse_args()
 
     project_root = Path(__file__).resolve().parents[1]
     input_path = Path(args.input) if args.input else project_root / "feedback" / "corrections.jsonl"
-    output_path = Path(args.output) if args.output else project_root / "feedback" / "RECOMMENDATIONS.md"
+    output_dir = Path(args.output_dir) if args.output_dir else project_root / "feedback"
 
     if not input_path.exists():
         print(f"No corrections file found: {input_path}", file=sys.stderr)
@@ -330,15 +427,23 @@ def main() -> None:
     store = FeedbackStore(input_path)
     records = store.load_all()
 
-    print(f"Loaded {len(records)} corrections from {input_path}")
+    print(f"Loaded {len(records)} corrections from {input_path}\n")
 
-    md = generate_recommendations(records, min_count=args.min_count)
+    # Generate RECOMMENDATIONS.md
+    recommendations_md = generate_recommendations(records, min_count=args.min_count)
+    recommendations_path = output_dir / "RECOMMENDATIONS.md"
+    recommendations_path.parent.mkdir(parents=True, exist_ok=True)
+    recommendations_path.write_text(recommendations_md, encoding="utf-8")
+    print(f"✅ Recommendations written to {recommendations_path}")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(md, encoding="utf-8")
-    print(f"Recommendations written to {output_path}")
+    # Generate FEEDBACK_LOG.md
+    feedback_log_md = generate_feedback_log(records, max_recent=args.max_recent)
+    feedback_log_path = output_dir / "FEEDBACK_LOG.md"
+    feedback_log_path.write_text(feedback_log_md, encoding="utf-8")
+    print(f"✅ Feedback log written to {feedback_log_path}\n")
 
     # Print summary
+    print("Summary:")
     type_counts = Counter(r.correction_type for r in records)
     for ct, cnt in type_counts.most_common():
         print(f"  {ct}: {cnt}")
