@@ -11,6 +11,7 @@ Requires the FastAPI backend running on http://localhost:8000.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -75,6 +76,24 @@ def check_llm_status() -> dict | None:
         return None
 
 
+def get_providers_status() -> dict:
+    """Fetch /providers with a 30-second session-state cache.
+
+    Returns a dict with keys 'current_provider' and 'providers' (list).
+    Falls back to an empty dict on error.
+    """
+    cache = st.session_state.get("_providers_cache", {})
+    if cache.get("ts", 0) > time.time() - 30:
+        return cache["data"]
+    try:
+        r = requests.get(f"{get_api_url()}/providers", timeout=12)
+        data = r.json()
+        st.session_state["_providers_cache"] = {"ts": time.time(), "data": data}
+        return data
+    except Exception:
+        return {"current_provider": "unknown", "providers": []}
+
+
 def post_query(question: str) -> dict:
     """POST /query with a natural-language question. Returns parsed JSON."""
     r = requests.post(
@@ -137,21 +156,68 @@ def render_sidebar():
         # API URL setting
         api_url = st.text_input("API URL", value=DEFAULT_API_URL, key="api_url")
 
-        # Status check — two-phase: fast healthz, then slower /ready for LLM info
+        # Status check — fast healthz first
         api_alive = check_api_alive()
         if not api_alive:
             st.error("API unreachable")
         else:
             st.success("API connected")
-            status = check_llm_status()
-            if status and status.get("ok"):
-                llm = status.get("llm", {})
-                if llm.get("backend_available"):
-                    st.caption(f"LLM: {llm.get('model', 'unknown')}")
+
+            # --- LLM Provider selector ---
+            providers_data = get_providers_status()
+            providers = providers_data.get("providers", [])
+            current = providers_data.get("current_provider", "")
+
+            if providers:
+                option_names = [p["name"] for p in providers]
+                option_labels = [
+                    (
+                        f"{'✅' if p['available'] else '❌'} "
+                        f"{p['label']}"
+                        + ("" if p["configured"] else " ⚠ not configured")
+                    )
+                    for p in providers
+                ]
+                current_idx = option_names.index(current) if current in option_names else 0
+
+                # No widget key — use index so we can reset it freely on error/switch
+                selected_idx = st.selectbox(
+                    "LLM Provider",
+                    options=range(len(option_names)),
+                    format_func=lambda i: option_labels[i],
+                    index=current_idx,
+                )
+                selected = option_names[selected_idx]
+
+                # Show model caption for the selected provider
+                selected_info = providers[selected_idx]
+                if selected_info["available"]:
+                    st.caption(f"Model: {selected_info['model']}")
                 else:
-                    st.caption("Parser: rule-based (LLM unavailable)")
+                    st.caption("LLM offline — fallback to rule-based parser")
+
+                # If user picked a different provider, hot-swap it
+                if selected != current:
+                    switch_error = None
+                    with st.spinner(f"Switching to {selected}…"):
+                        try:
+                            resp = requests.post(
+                                f"{get_api_url()}/provider",
+                                json={"provider": selected},
+                                timeout=15,
+                            )
+                            resp.raise_for_status()
+                        except Exception as exc:
+                            switch_error = str(exc)
+
+                    # Rerun/error outside spinner so it closes cleanly first
+                    if switch_error:
+                        st.error(f"Switch failed: {switch_error}")
+                    else:
+                        st.session_state["_providers_cache"] = {}
+                        st.rerun()
             else:
-                st.caption("Parser: rule-based (status unknown)")
+                st.caption("LLM status unavailable")
 
         st.divider()
 

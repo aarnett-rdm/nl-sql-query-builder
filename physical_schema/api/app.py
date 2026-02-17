@@ -18,6 +18,13 @@ from pydantic import BaseModel, Field, field_validator
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from pathlib import Path as _Path
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(_Path(__file__).resolve().parents[1] / ".env", override=False)
+except ImportError:
+    pass  # python-dotenv not installed; rely on OS environment variables
+
 from tools.nl_to_spec import nl_to_spec
 from tools.spec_executor import execute_spec
 from tools.config import AppConfig
@@ -85,6 +92,9 @@ app.add_middleware(
 
 # Lazy-initialized LLM adapter (set at startup)
 _llm_adapter: Optional[LLMAdapter] = None
+
+# Tracks the active provider name so /providers can report it
+_current_provider: str = config.llm_provider
 
 # Feedback store (set at startup)
 _feedback_store: Optional[FeedbackStore] = None
@@ -216,6 +226,29 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     feedback_id: str
     status: str = "recorded"
+
+
+class ProviderInfo(BaseModel):
+    name: str
+    label: str
+    model: str
+    available: bool
+    configured: bool
+
+
+class ProvidersResponse(BaseModel):
+    current_provider: str
+    providers: List[ProviderInfo]
+
+
+class ProviderSwitchRequest(BaseModel):
+    provider: str = Field(description="Provider to activate: 'groq' or 'ollama'")
+
+
+class ProviderSwitchResponse(BaseModel):
+    provider: str
+    model: str
+    available: bool
 
 
 # ----------------------------
@@ -832,6 +865,128 @@ def submit_feedback(req: FeedbackRequest):
         _regenerate_feedback_markdown()
 
     return FeedbackResponse(feedback_id=record.feedback_id)
+
+
+def _probe_ollama() -> bool:
+    """Check Ollama availability without relying on the current adapter."""
+    try:
+        from tools.llm_adapter import OllamaClient
+        client = OllamaClient(base_url=config.ollama_url, model=config.ollama_model, timeout=5)
+        return client.is_available()
+    except Exception:
+        return False
+
+
+def _probe_groq() -> bool:
+    """Check Groq availability (requires GROQ_API_KEY to be configured)."""
+    if not config.groq_api_key:
+        return False
+    try:
+        from tools.groq_backend import GroqBackend
+        backend = GroqBackend(api_key=config.groq_api_key, model=config.groq_model)
+        return backend.is_available()
+    except Exception:
+        return False
+
+
+@app.get("/providers", response_model=ProvidersResponse)
+def get_providers():
+    """List all configured LLM providers with live availability status.
+
+    Both providers are probed in parallel (8 s timeout each) so the response
+    is never slower than the slowest reachable backend.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        f_ollama = pool.submit(_probe_ollama)
+        f_groq = pool.submit(_probe_groq)
+        try:
+            ollama_ok = f_ollama.result(timeout=8)
+        except Exception:
+            ollama_ok = False
+        try:
+            groq_ok = f_groq.result(timeout=8)
+        except Exception:
+            groq_ok = False
+
+    providers = [
+        ProviderInfo(
+            name="groq",
+            label="Groq (Cloud)",
+            model=config.groq_model,
+            available=groq_ok,
+            configured=bool(config.groq_api_key),
+        ),
+        ProviderInfo(
+            name="ollama",
+            label="Ollama (Local/IT)",
+            model=config.ollama_model,
+            available=ollama_ok,
+            configured=True,
+        ),
+    ]
+    return ProvidersResponse(current_provider=_current_provider, providers=providers)
+
+
+@app.post("/provider", response_model=ProviderSwitchResponse)
+def switch_provider(req: ProviderSwitchRequest):
+    """Hot-swap the active LLM backend without restarting the API.
+
+    Rebuilds the LLM adapter with the requested backend.  The switch is
+    reflected immediately on subsequent /query calls.
+    """
+    global _llm_adapter, _current_provider
+
+    if req.provider not in ("groq", "ollama"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown provider '{req.provider}'. Must be 'groq' or 'ollama'.",
+        )
+
+    try:
+        if req.provider == "groq":
+            if not config.groq_api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="GROQ_API_KEY is not configured. Add it to your .env file.",
+                )
+            from tools.groq_backend import GroqBackend
+            new_backend = GroqBackend(api_key=config.groq_api_key, model=config.groq_model)
+        else:
+            from tools.llm_adapter import OllamaClient
+            new_backend = OllamaClient(
+                base_url=config.ollama_url,
+                model=config.ollama_model,
+                timeout=config.ollama_timeout,
+            )
+
+        _llm_adapter = build_llm_adapter(
+            registry_path=config.metric_registry,
+            physical_schema_path=config.physical_schema,
+            retriever_chunks_dir=str(config.chunks_dir) if config.chunks_dir else None,
+            backend=new_backend,
+        )
+        _current_provider = req.provider
+        available = new_backend.is_available()
+
+        _log_json(
+            "provider_switched",
+            request_id="switch",
+            provider=req.provider,
+            model=new_backend.model_name,
+            available=available,
+        )
+        return ProviderSwitchResponse(
+            provider=_current_provider,
+            model=new_backend.model_name,
+            available=available,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to switch to '{req.provider}': {exc}",
+        )
 
 
 @app.get("/healthz")
