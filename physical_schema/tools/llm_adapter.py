@@ -573,6 +573,10 @@ def build_llm_adapter(
 
     Uses project defaults if paths not provided.
     Optionally initializes the hybrid retriever for schema context.
+
+    Backend selection (when `backend` param is None):
+        - NL_SQL_LLM_PROVIDER=groq  → GroqBackend (requires GROQ_API_KEY)
+        - NL_SQL_LLM_PROVIDER=ollama → OllamaClient (default)
     """
     project_root = Path(__file__).resolve().parents[1]
 
@@ -598,6 +602,21 @@ def build_llm_adapter(
                 logger.info("Hybrid retriever initialized from %s", retriever_chunks_dir)
             except Exception as e:
                 logger.warning("Failed to initialize retriever: %s", e)
+
+    # Auto-select backend from env if not explicitly provided
+    if backend is None:
+        import os
+        provider = os.getenv("NL_SQL_LLM_PROVIDER", "ollama").lower()
+        if provider == "groq":
+            try:
+                from tools.groq_backend import GroqBackend
+            except ImportError:
+                from groq_backend import GroqBackend
+
+            api_key = os.getenv("GROQ_API_KEY", "")
+            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            backend = GroqBackend(api_key=api_key, model=model)
+            logger.info("Using Groq backend: model=%s", model)
 
     return LLMAdapter(
         registry_path=registry_path,

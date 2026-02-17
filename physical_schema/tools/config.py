@@ -44,10 +44,14 @@ class AppConfig:
 
     # LLM settings
     llm_enabled: bool = True
-    llm_provider: str = "ollama"  # future: "azure_openai", "anthropic"
+    llm_provider: str = "ollama"  # "ollama" or "groq"
     ollama_url: str = "http://192.168.12.51:11434"
     ollama_model: str = "qwen3:14b"
     ollama_timeout: int = 300
+
+    # Groq settings (used when llm_provider=groq)
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # Cost tracking (for eval framework; default 0.0 for local Ollama)
     cost_per_input_token: float = 0.0
@@ -89,6 +93,10 @@ class AppConfig:
         kwargs["ollama_model"] = os.getenv("OLLAMA_MODEL", "qwen3:14b")
         kwargs["ollama_timeout"] = int(
             os.getenv("OLLAMA_TIMEOUT", "300")
+        )
+        kwargs["groq_api_key"] = os.getenv("GROQ_API_KEY", "")
+        kwargs["groq_model"] = os.getenv(
+            "GROQ_MODEL", "llama-3.3-70b-versatile"
         )
         kwargs["cost_per_input_token"] = float(
             os.getenv("NL_SQL_COST_PER_INPUT_TOKEN", "0.0")
