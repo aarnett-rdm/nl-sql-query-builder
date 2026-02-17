@@ -24,7 +24,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
-from ui.shared import format_results, init_fabric_state, render_fabric_sidebar  # noqa: E402
+from ui.shared import format_results, build_totals_row, init_fabric_state, render_fabric_sidebar  # noqa: E402
 from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -371,11 +371,12 @@ def render_chat_history():
                 # Show chart if suitable
                 if viz_info["should_visualize"]:
                     # Initialize chart visibility state for this message
-                    chart_key = f"show_chart_{idx}"
+                    # NOTE: use a distinct key from button widget keys to avoid Streamlit collision
+                    chart_key = f"chart_visible_{idx}"
                     if chart_key not in st.session_state:
                         st.session_state[chart_key] = True  # Auto-show by default
 
-                    # Toggle button
+                    # Toggle button + reason caption
                     col1, col2 = st.columns([1, 4])
                     with col1:
                         if st.session_state[chart_key]:
@@ -383,7 +384,7 @@ def render_chat_history():
                                 st.session_state[chart_key] = False
                                 st.rerun()
                         else:
-                            if st.button("📊 Show Chart", key=f"show_chart_{idx}", use_container_width=True):
+                            if st.button("📊 Show Chart", key=f"show_chart_btn_{idx}", use_container_width=True):
                                 st.session_state[chart_key] = True
                                 st.rerun()
 
@@ -392,11 +393,56 @@ def render_chat_history():
 
                     # Display chart if visible
                     if st.session_state[chart_key]:
+                        chart_config = dict(viz_info["config"])  # mutable copy
+
+                        # For horizontal bar charts, let the user pick one or more metrics
+                        effective_chart_type = viz_info["chart_type"]
+                        if viz_info["chart_type"] == "horizontal_bar":
+                            numeric_cols = df.select_dtypes(include="number").columns.tolist()
+                            if len(numeric_cols) > 1:
+                                metric_state_key = f"chart_metrics_{idx}"
+                                default_metric = chart_config.get("x_col", numeric_cols[0])
+                                if metric_state_key not in st.session_state:
+                                    st.session_state[metric_state_key] = [default_metric]
+
+                                # Sanitise stored selection against current columns
+                                valid = [
+                                    m for m in st.session_state[metric_state_key]
+                                    if m in numeric_cols
+                                ]
+                                if not valid:
+                                    valid = [default_metric]
+
+                                selected_metrics = st.multiselect(
+                                    "Metrics to chart",
+                                    options=numeric_cols,
+                                    default=valid,
+                                    key=f"chart_metric_sel_{idx}",
+                                    label_visibility="collapsed",
+                                )
+                                if selected_metrics:
+                                    st.session_state[metric_state_key] = selected_metrics
+                                else:
+                                    selected_metrics = valid  # keep last valid selection
+
+                                if len(selected_metrics) == 1:
+                                    chart_config["x_col"] = selected_metrics[0]
+                                    chart_config["sort_by"] = selected_metrics[0]
+                                else:
+                                    effective_chart_type = "horizontal_bar_multi"
+                                    chart_config["x_cols"] = selected_metrics
+
                         try:
-                            fig = create_chart(df, viz_info["chart_type"], viz_info["config"])
+                            fig = create_chart(df, effective_chart_type, chart_config)
                             st.plotly_chart(fig, use_container_width=True)
                         except Exception as e:
                             st.error(f"Chart generation failed: {e}")
+
+                # Show totals row above the data table (when >1 rows with numeric data)
+                totals_row = build_totals_row(df)
+                if totals_row is not None:
+                    st.markdown("**Totals**")
+                    st.dataframe(format_results(totals_row), use_container_width=True, hide_index=True)
 
                 # Show data table
                 st.dataframe(format_results(df), use_container_width=True)

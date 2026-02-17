@@ -19,8 +19,9 @@ def _norm_table_name(table: str) -> str:
 
 
 def _safe_divide_sql(numer_sql: str, denom_sql: str) -> str:
-    # Fabric / T-SQL safe divide
-    return f"({numer_sql} / NULLIF({denom_sql}, 0))"
+    # CAST numerator to FLOAT to prevent T-SQL integer division truncation
+    # e.g. SUM(int) / SUM(int) = 0 in SQL Server without this cast
+    return f"(CAST({numer_sql} AS FLOAT) / NULLIF({denom_sql}, 0))"
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ for the NL SQL Query Builder UI.
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 from typing import Optional, Dict, Any, List, Tuple
 import re
 
@@ -198,13 +199,13 @@ def create_chart(df: pd.DataFrame, chart_type: str, config: Optional[Dict] = Non
     if config is None:
         config = {}
 
-    # Apply sorting if specified
-    if "sort_by" in config and config["sort_by"] in df.columns:
-        df = df.sort_values(by=config["sort_by"])
+    # Apply sorting and limit (horizontal_bar* handle this internally for correct top-N behavior)
+    if chart_type not in ("horizontal_bar", "horizontal_bar_multi"):
+        if "sort_by" in config and config["sort_by"] in df.columns:
+            df = df.sort_values(by=config["sort_by"])
 
-    # Apply limit if specified
-    if "limit" in config:
-        df = df.head(config["limit"])
+        if "limit" in config:
+            df = df.head(config["limit"])
 
     if chart_type == "number":
         return _create_number_display(df, config)
@@ -220,6 +221,8 @@ def create_chart(df: pd.DataFrame, chart_type: str, config: Optional[Dict] = Non
         return _create_grouped_bar_chart(df, config)
     elif chart_type == "horizontal_bar":
         return _create_horizontal_bar_chart(df, config)
+    elif chart_type == "horizontal_bar_multi":
+        return _create_horizontal_bar_multi(df, config)
     else:
         raise ValueError(f"Unknown chart type: {chart_type}")
 
@@ -508,10 +511,12 @@ def _create_horizontal_bar_chart(df: pd.DataFrame, config: Dict) -> go.Figure:
     x_col = config.get("x_col")  # numeric
     y_col = config.get("y_col")  # categorical
 
-    # Sort descending and limit
-    df = df.sort_values(by=x_col, ascending=True)  # Ascending for horizontal (bottom to top)
+    # Get top N by value (sort descending, take head), then re-sort ascending for display
+    # (ascending order makes the highest-value bar appear at the top of horizontal charts)
+    df = df.sort_values(by=x_col, ascending=False)
     if "limit" in config:
-        df = df.tail(config["limit"])
+        df = df.head(config["limit"])
+    df = df.sort_values(by=x_col, ascending=True)
 
     color = _get_metric_color(x_col)
 
@@ -532,6 +537,62 @@ def _create_horizontal_bar_chart(df: pd.DataFrame, config: Dict) -> go.Figure:
 
     fig.update_xaxes(title=x_col)
     fig.update_yaxes(title=y_col)
+
+    return fig
+
+
+def _create_horizontal_bar_multi(df: pd.DataFrame, config: Dict) -> go.Figure:
+    """
+    Creates side-by-side subplot panels for multiple metrics on a horizontal bar chart.
+
+    Each metric gets its own x-axis panel so differing scales (e.g. cost vs clicks)
+    don't distort each other. Campaign names are shared on the left y-axis.
+    Campaigns are ranked by the first selected metric.
+    """
+    x_cols = config.get("x_cols", [])  # list of numeric metric columns
+    y_col = config.get("y_col")        # categorical (campaign name)
+    limit = config.get("limit", 15)
+
+    if not x_cols:
+        raise ValueError("horizontal_bar_multi requires x_cols list")
+
+    # Sort by first metric descending to get top N, then ascending for display
+    sort_col = x_cols[0]
+    df = df.sort_values(by=sort_col, ascending=False).head(limit)
+    df = df.sort_values(by=sort_col, ascending=True)
+
+    n = len(x_cols)
+    fig = make_subplots(
+        rows=1,
+        cols=n,
+        shared_yaxes=True,          # campaign names on left only
+        horizontal_spacing=0.04,
+        subplot_titles=x_cols,
+    )
+
+    for i, x_col in enumerate(x_cols, start=1):
+        color = _get_metric_color(x_col)
+        fig.add_trace(
+            go.Bar(
+                x=df[x_col],
+                y=df[y_col],
+                orientation="h",
+                name=x_col,
+                marker=dict(color=color),
+                showlegend=False,
+            ),
+            row=1,
+            col=i,
+        )
+
+    panel_height = max(400, len(df) * 28)
+    fig.update_layout(
+        height=panel_height,
+        template="plotly_white",
+        font=dict(family="Arial, sans-serif", size=11),
+        margin=dict(l=10, r=20, t=50, b=30),
+        title=f"Top {len(df)} campaigns",
+    )
 
     return fig
 
