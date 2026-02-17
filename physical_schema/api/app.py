@@ -155,6 +155,15 @@ class QueryRequest(BaseModel):
             "show conversions and cost by account yesterday",
         ],
     )
+    previous_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional context from the previous successful query. "
+            "Keys: 'question' (str) and 'spec' (dict). "
+            "Injected into the LLM prompt so follow-up questions inherit "
+            "platform, date, and metric context."
+        ),
+    )
 
 
 class QueryResponse(BaseModel):
@@ -522,12 +531,22 @@ def _run_with_timeout(fn, *args, timeout_sec: int = 0):
         raise LLMBackendError(f"LLM request timed out after {timeout_sec}s")
 
 
-def _parse_question(question: str) -> Dict[str, Any]:
-    """Parse a natural language question into a Spec dict."""
+def _parse_question(
+    question: str, previous_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Parse a natural language question into a Spec dict.
+
+    Args:
+        question: Natural language question.
+        previous_context: Optional dict with keys 'question' and 'spec' from
+                          the previous successful query, forwarded to the LLM
+                          so follow-up questions can inherit context.
+    """
     if _llm_adapter is not None:
         return _run_with_timeout(
             _llm_adapter.parse_nl_to_spec,
             question,
+            previous_context,
             timeout_sec=config.ollama_timeout,
         )
     return nl_to_spec(question, config.metric_registry)
@@ -633,7 +652,7 @@ def query(
     parser_used = "unknown"
     _log_json("query_received", request_id=request_id, question_len=len(req.question), api_key_present=bool(api_key))
 
-    spec = _parse_question(req.question)
+    spec = _parse_question(req.question, req.previous_context)
     parser_used = spec.get("notes", {}).get("parser", "rule_based")
 
     clarifications = spec.get("clarifications", []) or []

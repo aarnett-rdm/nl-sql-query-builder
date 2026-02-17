@@ -32,6 +32,7 @@ from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa:
 # ---------------------------------------------------------------------------
 
 DEFAULT_API_URL = "http://localhost:8000"
+CONTEXT_TIMEOUT_SECS = 600  # Auto-expire previous query context after 10 minutes
 
 # ---------------------------------------------------------------------------
 # Session state initialisation
@@ -46,8 +47,49 @@ if "pending_clars" not in st.session_state:
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
 
+# Conversational context — stores last successful query for follow-up chaining
+if "ctx_spec" not in st.session_state:
+    st.session_state.ctx_spec = None
+if "ctx_question" not in st.session_state:
+    st.session_state.ctx_question = None
+if "ctx_time" not in st.session_state:
+    st.session_state.ctx_time = 0.0
+
 # Initialize Fabric connection state
 init_fabric_state()
+
+
+# ---------------------------------------------------------------------------
+# Conversational context helpers
+# ---------------------------------------------------------------------------
+
+def get_active_context() -> dict | None:
+    """Return {question, spec} if a valid non-expired context exists, else None."""
+    if st.session_state.get("ctx_spec") is None:
+        return None
+    elapsed = time.time() - st.session_state.get("ctx_time", 0.0)
+    if elapsed > CONTEXT_TIMEOUT_SECS:
+        st.session_state.ctx_spec = None
+        st.session_state.ctx_question = None
+        return None
+    return {
+        "question": st.session_state.ctx_question,
+        "spec": st.session_state.ctx_spec,
+    }
+
+
+def save_context(question: str, spec: dict) -> None:
+    """Persist the last successful query as context for the next request."""
+    st.session_state.ctx_spec = spec
+    st.session_state.ctx_question = question
+    st.session_state.ctx_time = time.time()
+
+
+def clear_context() -> None:
+    """Discard the active query context."""
+    st.session_state.ctx_spec = None
+    st.session_state.ctx_question = None
+    st.session_state.ctx_time = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +137,18 @@ def get_providers_status() -> dict:
 
 
 def post_query(question: str) -> dict:
-    """POST /query with a natural-language question. Returns parsed JSON."""
+    """POST /query with a natural-language question. Returns parsed JSON.
+
+    Automatically includes the previous query context (if any) so the LLM
+    can handle follow-up questions without the user repeating platform/date info.
+    """
+    payload: dict = {"question": question}
+    ctx = get_active_context()
+    if ctx:
+        payload["previous_context"] = ctx
     r = requests.post(
         f"{get_api_url()}/query",
-        json={"question": question},
+        json=payload,
         timeout=60,
     )
     r.raise_for_status()
@@ -231,12 +281,25 @@ def render_sidebar():
 
         st.divider()
 
+        # Conversational context indicator
+        ctx = get_active_context()
+        if ctx:
+            st.caption("🔗 Context active")
+            prev_q = ctx["question"]
+            display_q = f'"{prev_q[:55]}…"' if len(prev_q) > 55 else f'"{prev_q}"'
+            st.markdown(f"*{display_q}*")
+            if st.button("Clear context", key="clear_ctx_btn", use_container_width=True):
+                clear_context()
+                st.rerun()
+            st.divider()
+
         # Clear chat button (keeps Fabric connection alive)
         if st.button("Clear chat", use_container_width=True):
             st.session_state.messages = []
             st.session_state.pending_spec = None
             st.session_state.pending_clars = None
             st.session_state.pending_question = None
+            clear_context()
             st.rerun()
 
 
@@ -582,6 +645,15 @@ def handle_query_response(data: dict):
         meta = "  \n".join(meta_parts)
         content = "Here's your query:" + (f"\n\n{meta}" if meta else "")
         append_assistant_message(content, sql=sql, spec=spec, request_id=request_id)
+
+        # Save context for follow-up chaining: use the raw user question from messages
+        user_question = ""
+        for msg in reversed(st.session_state.messages):
+            if msg["role"] == "user":
+                user_question = msg["content"]
+                break
+        if user_question:
+            save_context(user_question, spec)
 
     elif clars:
         # Need clarification

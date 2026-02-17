@@ -214,17 +214,18 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 
 ## Priority 7: Enhanced User Experience
 
-### 7.1 Conversational Context & Query Chaining
-- [ ] Session state management — Store previous_spec, previous_dimensions, previous_filters in Streamlit session
-- [ ] Context-aware NL parsing — LLMAdapter accepts optional previous_context parameter
-- [ ] Follow-up question detection — Recognize patterns like "now break that down by X", "add Y to that", "same thing but for Z"
-- [ ] Incremental spec building — Merge follow-up requests with previous spec instead of starting from scratch
-- [ ] UI affordances — Show "Previous query" context in chat, "Clear context" button
-- [ ] Context timeout — Auto-clear context after N minutes of inactivity
+### 7.1 Conversational Context & Query Chaining — **DONE** (Feb 17, 2026)
+- ~~Session state management~~ — `ctx_spec`, `ctx_question`, `ctx_time` stored in Streamlit session state after each successful query
+- ~~Context-aware NL parsing~~ — `LLMAdapter.parse_nl_to_spec()` and `PromptBuilder.build_user_prompt()` accept optional `previous_context` dict
+- ~~Follow-up question detection~~ — LLM handles detection; previous spec injected into prompt with merge/ignore instructions
+- ~~Incremental spec building~~ — LLM merges unchanged fields (platform, grain, date, metrics, dims) from previous spec on follow-up
+- ~~UI affordances~~ — Sidebar shows "Context active" indicator with question preview + "Clear context" button
+- ~~Context timeout~~ — Auto-clears after 10 minutes (`CONTEXT_TIMEOUT_SECS = 600`); also cleared on "Clear chat"
 
 **Value:** Makes chat feel like natural conversation, enables iterative data exploration
+**Files changed:** `tools/llm_adapter.py`, `api/app.py`, `ui/Query Builder.py`
 
-### 7.2 Schema Explorer & Metric Catalog UI — **PHASE 2 COMPLETE** (Feb 13, 2026)
+### 7.2 Schema Explorer & Metric Catalog UI — **PHASE 3 COMPLETE** (Feb 17, 2026)
 - ~~Metrics browser~~ — Tabular view with name, type, class, formula, platforms, grains; expandable formula details for derived metrics
 - ~~Dimensions browser~~ — Dynamic extraction via `tools/dimension_extractor.py`, shows source tables and occurrence count
 - ~~Platform/grain matrix~~ — Numeric grid showing metric count per platform+grain combination
@@ -233,8 +234,8 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 - ~~Click-to-add integration~~ — Metric selection with session state, pre-populates chat page
 - ~~Sample data preview~~ — Load top 10 dimension values from Fabric on demand with 24h caching
 - ~~Dynamic dimension extraction~~ — `DimensionExtractor` parses physical_schema.json with heuristics (min 2 table occurrences)
-- [ ] Business definitions — Human-readable descriptions (deferred to Phase 3: add `description` field to registry)
-- [ ] Table relationship diagram — Visual graph (deferred to Phase 3: requires graphviz/plotly)
+- ~~Business definitions~~ — `description` field added to all 20 metrics in `metric_registry.json`; shown in Metrics Browser table and derived metric expanders
+- ~~Table relationship diagram~~ — New "Table Relationships" tab with interactive Plotly network graph; nodes colored by type (fact/dimension/mapping), edges colored by confidence; platform filter + high-confidence-only toggle; hover tooltips; expandable edge table
 
 **Value:** Solves discoverability problem, helps users learn what's queryable without guessing
 **Page location:** `ui/pages/Schema Explorer.py` (auto-discovered as "Schema Explorer" in Streamlit sidebar)

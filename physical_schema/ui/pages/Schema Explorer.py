@@ -7,6 +7,7 @@ Helps users discover what's queryable without digging through JSON configs.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -56,6 +57,7 @@ def load_metrics_catalog(registry_path: str) -> pd.DataFrame:
 
         row = {
             "Metric": key,
+            "Description": metric_def.get("description", ""),
             "Type": "Derived" if is_derived else "Base",
             "Class": metric_def.get("metric_class", ""),
             "Aggregation": metric_def.get("default_aggregation", ""),
@@ -190,6 +192,205 @@ def fetch_dimension_samples(dimension: str, source_tables_str: str) -> list[str]
         raise RuntimeError(f"Failed to fetch samples from {table}: {e}")
 
 
+@st.cache_data(ttl=3600)
+def build_relationship_data(
+    registry_path: str, schema_path: str, platform: str
+) -> tuple[list[str], list[dict], list[str]]:
+    """
+    Build node and edge data for the table relationship graph.
+
+    Returns:
+        (nodes, edges, fact_tables) where edges are plain dicts for cacheability.
+    """
+    from tools.join_planner import PhysicalSchema
+
+    with open(registry_path) as f:
+        registry_json = json.load(f)
+
+    with open(schema_path) as f:
+        schema_payload = json.load(f)
+
+    # Collect fact tables referenced in the registry
+    fact_tables: set[str] = set()
+    for metric_def in registry_json["metrics"].values():
+        for grain_dict in metric_def.get("preferred_fact_table", {}).values():
+            for tables in grain_dict.values():
+                fact_tables.update(tables)
+
+    schema = PhysicalSchema(schema_payload)
+    plat = None if platform == "All" else platform
+
+    nodes: set[str] = set(fact_tables)
+    edges: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    for table in list(fact_tables):
+        try:
+            for edge in schema.neighbors(table, platform=plat):
+                key = (edge.from_table, edge.to_table)
+                if key not in seen:
+                    seen.add(key)
+                    edges.append(
+                        {
+                            "from": edge.from_table,
+                            "to": edge.to_table,
+                            "confidence": edge.confidence,
+                            "join_cols": (
+                                f"{', '.join(edge.from_columns)}"
+                                f" → {', '.join(edge.to_columns)}"
+                            ),
+                        }
+                    )
+                    nodes.add(edge.to_table)
+        except Exception:
+            # Skip tables that fail to resolve neighbors
+            pass
+
+    return list(nodes), edges, list(fact_tables)
+
+
+def build_plotly_graph(
+    nodes: list[str],
+    edges: list[dict],
+    fact_tables: list[str],
+    high_only: bool,
+) -> "go.Figure":
+    """Build a Plotly network graph from node/edge data."""
+    import networkx as nx
+    import plotly.graph_objects as go
+
+    fact_set = set(fact_tables)
+    MAPPING_KEYWORDS = {"entitymap", "map", "mapping", "bridge", "xref", "junction"}
+
+    def node_color(name: str) -> str:
+        if name in fact_set:
+            return "#4C72B0"  # blue — fact/metric table
+        if any(k in name.lower() for k in MAPPING_KEYWORDS):
+            return "#DD8452"  # orange — mapping/bridge table
+        return "#55A868"  # green — dimension table
+
+    def short_label(name: str) -> str:
+        """Shorten long table names for display."""
+        label = name
+        label = label.replace("GoogleAds", "GA·")
+        label = label.replace("MicrosoftAds", "MS·")
+        label = label.replace("PerformanceMetric", "Perf")
+        label = label.replace("AuctionInsightMetric", "Auction")
+        label = label.replace("BidChange", "Bid")
+        return label
+
+    # Build NetworkX graph
+    G = nx.DiGraph()
+    G.add_nodes_from(nodes)
+    for e in edges:
+        if high_only and e["confidence"] != "high":
+            continue
+        G.add_edge(e["from"], e["to"], confidence=e["confidence"], join_cols=e["join_cols"])
+
+    if G.number_of_nodes() == 0:
+        return None
+
+    pos = nx.spring_layout(G, seed=42, k=2.5)
+
+    # --- Edge traces (one per confidence level for legend) ---
+    conf_styles = {
+        "high": dict(color="#444444", width=2, dash="solid"),
+        "medium": dict(color="#999999", width=1.5, dash="dash"),
+        "low": dict(color="#CCCCCC", width=1, dash="dot"),
+    }
+    conf_labels = {"high": "High confidence join", "medium": "Medium confidence", "low": "Low confidence"}
+    conf_shown = {c: False for c in conf_styles}
+
+    edge_traces = []
+    for u, v, data in G.edges(data=True):
+        conf = data.get("confidence", "medium")
+        style = conf_styles.get(conf, conf_styles["medium"])
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        show = not conf_shown[conf]
+        conf_shown[conf] = True
+        edge_traces.append(
+            go.Scatter(
+                x=[x0, x1, None],
+                y=[y0, y1, None],
+                mode="lines",
+                line=dict(color=style["color"], width=style["width"], dash=style["dash"]),
+                hoverinfo="none",
+                name=conf_labels[conf],
+                legendgroup=conf,
+                showlegend=show,
+            )
+        )
+
+    # --- Node traces (grouped by type for legend) ---
+    type_groups = {
+        "Fact / Metric table": ("blue", []),
+        "Dimension table": ("green", []),
+        "Mapping / Bridge table": ("orange", []),
+    }
+    color_to_type = {
+        "#4C72B0": "Fact / Metric table",
+        "#55A868": "Dimension table",
+        "#DD8452": "Mapping / Bridge table",
+    }
+
+    node_traces = []
+    type_shown: dict[str, bool] = {}
+
+    for node in G.nodes():
+        color = node_color(node)
+        node_type = color_to_type[color]
+        x, y = pos[node]
+
+        # Build hover text
+        successors = list(G.successors(node))
+        predecessors = list(G.predecessors(node))
+        hover = f"<b>{node}</b><br>Type: {node_type}"
+        if successors:
+            hover += "<br>Joins to: " + ", ".join(successors[:4])
+        if predecessors:
+            hover += "<br>Referenced by: " + ", ".join(predecessors[:4])
+
+        show = node_type not in type_shown
+        type_shown[node_type] = True
+
+        node_traces.append(
+            go.Scatter(
+                x=[x],
+                y=[y],
+                mode="markers+text",
+                text=[short_label(node)],
+                textposition="top center",
+                textfont=dict(size=8),
+                hovertext=[hover],
+                hoverinfo="text",
+                marker=dict(size=14, color=color, line=dict(width=1, color="white")),
+                name=node_type,
+                legendgroup=node_type,
+                showlegend=show,
+            )
+        )
+
+    fig = go.Figure(data=edge_traces + node_traces)
+    fig.update_layout(
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        margin=dict(l=20, r=20, t=20, b=20),
+        plot_bgcolor="white",
+        height=650,
+        hovermode="closest",
+        legend=dict(
+            orientation="v",
+            x=1.01,
+            y=1,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#DDDDDD",
+            borderwidth=1,
+        ),
+    )
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Main UI
 # ---------------------------------------------------------------------------
@@ -235,8 +436,13 @@ def main():
         st.stop()
 
     # Main content - tabs
-    tab1, tab2, tab3 = st.tabs(
-        ["📊 Metrics Browser", "📋 Dimensions Browser", "🔀 Platform/Grain Matrix"]
+    tab1, tab2, tab3, tab4 = st.tabs(
+        [
+            "📊 Metrics Browser",
+            "📋 Dimensions Browser",
+            "🔀 Platform/Grain Matrix",
+            "🔗 Table Relationships",
+        ]
     )
 
     # --- Tab 1: Metrics Browser ---
@@ -284,6 +490,7 @@ def main():
                 hide_index=True,
                 column_config={
                     "Metric": st.column_config.TextColumn("Metric Name", width="medium"),
+                    "Description": st.column_config.TextColumn("Description", width="large"),
                     "Type": st.column_config.TextColumn("Type", width="small"),
                     "Class": st.column_config.TextColumn("Class", width="small"),
                     "Aggregation": st.column_config.TextColumn("Aggregation", width="small"),
@@ -306,6 +513,8 @@ def main():
             else:
                 for _, metric in derived_metrics.iterrows():
                     with st.expander(f"📐 {metric['Metric']}"):
+                        if metric.get("Description"):
+                            st.markdown(f"**Description:** {metric['Description']}")
                         st.markdown(f"**Formula:** `{metric['Formula']}`")
                         st.markdown(f"**Base Metrics:** {metric['Base Metrics']}")
                         st.markdown(f"**Class:** {metric['Class']}")
@@ -413,6 +622,90 @@ def main():
             )
         else:
             st.warning("No data to display.")
+
+    # --- Tab 4: Table Relationships ---
+    with tab4:
+        st.header("Table Relationships")
+        st.caption(
+            "Visual map of fact tables (from the metric registry) and their dimension joins. "
+            "Hover over a node for details."
+        )
+
+        # Controls
+        col1, col2 = st.columns([2, 2])
+        with col1:
+            graph_platform = st.selectbox(
+                "Filter edges by platform",
+                ["All", "google_ads", "microsoft_ads", "exchange", "gotickets"],
+                key="graph_platform",
+            )
+        with col2:
+            high_only = st.checkbox(
+                "Show high-confidence joins only",
+                value=False,
+                key="graph_high_only",
+                help="Hides medium/low confidence inferred joins to reduce clutter",
+            )
+
+        # Load graph data
+        try:
+            with st.spinner("Building relationship graph..."):
+                nodes, edges, fact_tables = build_relationship_data(
+                    str(METRIC_REGISTRY), str(PHYSICAL_SCHEMA), graph_platform
+                )
+        except ImportError as e:
+            st.error(
+                f"Missing dependency: {e}. "
+                "Run `pip install networkx plotly` in your UI environment."
+            )
+            st.stop()
+        except Exception as e:
+            st.error(f"Failed to build relationship data: {e}")
+            st.stop()
+
+        if not nodes:
+            st.warning("No table relationships found.")
+        else:
+            # Build and display the graph
+            try:
+                import plotly.graph_objects  # noqa: F401 — confirm plotly available
+                fig = build_plotly_graph(nodes, edges, fact_tables, high_only)
+                if fig is None:
+                    st.warning("No nodes to display after applying filters.")
+                else:
+                    st.plotly_chart(fig, use_container_width=True)
+            except ImportError:
+                st.error("Plotly not installed. Run `pip install plotly` in your UI environment.")
+                st.stop()
+
+            # Summary stats below the graph
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Tables", len(nodes))
+            c2.metric("Fact / Metric tables", len(fact_tables))
+            c3.metric(
+                "Join edges",
+                sum(1 for e in edges if not high_only or e["confidence"] == "high"),
+            )
+
+            # Edge table (expandable)
+            with st.expander("View all join edges"):
+                edge_df = pd.DataFrame(
+                    [
+                        {
+                            "From Table": e["from"],
+                            "To Table": e["to"],
+                            "Confidence": e["confidence"],
+                            "Join Columns": e["join_cols"],
+                        }
+                        for e in edges
+                        if not high_only or e["confidence"] == "high"
+                    ]
+                )
+                if not edge_df.empty:
+                    st.dataframe(edge_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No edges match the current filter.")
 
 
 if __name__ == "__main__":

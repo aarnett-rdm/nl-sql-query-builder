@@ -156,8 +156,14 @@ class PromptBuilder:
             current_date=datetime.date.today().isoformat(),
         )
 
-    def build_user_prompt(self, question: str) -> str:
-        """Build user message with few-shot examples prepended."""
+    def build_user_prompt(
+        self, question: str, previous_context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Build user message with few-shot examples prepended.
+
+        If previous_context is provided (keys: 'question', 'spec'), it is injected
+        before the current question so the LLM can handle follow-up queries.
+        """
         parts: List[str] = []
 
         # Few-shot examples (keep compact)
@@ -167,6 +173,26 @@ class PromptBuilder:
                 q = ex["question"]
                 spec = json.dumps(ex["spec"], separators=(",", ":"))
                 parts.append(f"Q: {q}\nA: {spec}\n")
+
+        # Inject previous query context if available
+        if previous_context:
+            prev_q = previous_context.get("question", "")
+            prev_spec = previous_context.get("spec", {})
+            # Strip internal metadata fields to keep the context compact
+            display_spec = {
+                k: v for k, v in prev_spec.items()
+                if k not in ("notes", "clarifications")
+            }
+            prev_spec_str = json.dumps(display_spec, separators=(",", ":"))
+            parts.append(
+                "[CONTEXT FROM PREVIOUS QUERY]\n"
+                f'Previous question: "{prev_q}"\n'
+                f"Previous spec: {prev_spec_str}\n\n"
+                "If the new question is a follow-up, keep any unchanged fields "
+                "(metrics, platform, grain, date filter, dimensions) from the previous spec. "
+                "If it is a completely new question, ignore the context above.\n"
+                "[END CONTEXT]\n"
+            )
 
         parts.append(f"Now convert this question to a Spec JSON:\nQ: {question}\nA:")
         return "\n".join(parts)
@@ -416,17 +442,25 @@ class LLMAdapter:
         """Deprecated alias for self.backend. Kept for backward compatibility."""
         return self.backend
 
-    def parse_nl_to_spec(self, question: str) -> Dict[str, Any]:
+    def parse_nl_to_spec(
+        self, question: str, previous_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Convert natural language to Spec JSON.
 
         Tries LLM first; falls back to rule-based parser on any failure.
         Returns a Spec dict ready for spec_executor.execute_spec().
+
+        Args:
+            question: Natural language question from the user.
+            previous_context: Optional dict with keys 'question' and 'spec' from
+                              the last successful query. Injected into the prompt so
+                              the LLM can handle follow-up questions intelligently.
         """
         # Try LLM path
         if self.backend.is_available():
             try:
-                spec = self._llm_parse(question)
+                spec = self._llm_parse(question, previous_context)
                 spec["notes"] = spec.get("notes") or {}
                 spec["notes"]["raw_user_text"] = question
                 spec["notes"]["parser"] = "llm"
@@ -482,7 +516,9 @@ class LLMAdapter:
 
         return None
 
-    def _llm_parse(self, question: str) -> Dict[str, Any]:
+    def _llm_parse(
+        self, question: str, previous_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Core LLM parsing logic."""
 
         # Retrieve relevant schema chunks if retriever is available
@@ -501,7 +537,7 @@ class LLMAdapter:
 
         # Build prompts
         system_prompt = self.prompt_builder.build_system_prompt(retrieved_chunks)
-        user_prompt = self.prompt_builder.build_user_prompt(question)
+        user_prompt = self.prompt_builder.build_user_prompt(question, previous_context)
 
         # Call LLM backend
         t0 = time.time()

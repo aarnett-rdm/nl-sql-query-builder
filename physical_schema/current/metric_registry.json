@@ -2,6 +2,7 @@
   "metrics": {
     "impressions": {
       "semantic_name": "impressions",
+      "description": "Number of times your ads were displayed to users",
       "metric_class": "performance_count",
       "default_aggregation": "sum",
       "base_columns": [
@@ -63,6 +64,7 @@
     },
     "clicks": {
       "semantic_name": "clicks",
+      "description": "Number of clicks on your ads",
       "metric_class": "performance_count",
       "default_aggregation": "sum",
       "base_columns": [
@@ -124,6 +126,7 @@
     },
     "cost": {
       "semantic_name": "cost",
+      "description": "Total ad spend charged by the ad platform",
       "metric_class": "cost",
       "default_aggregation": "sum",
       "base_columns": [
@@ -185,6 +188,7 @@
     },
     "conversions": {
       "semantic_name": "conversions",
+      "description": "Completed desired actions (purchases, sign-ups, etc.) attributed to your ads",
       "metric_class": "conversion_count",
       "default_aggregation": "sum",
       "base_columns": [
@@ -246,6 +250,7 @@
     },
     "revenue": {
       "semantic_name": "revenue",
+      "description": "Total revenue attributed to ad-driven conversions",
       "metric_class": "revenue",
       "default_aggregation": "sum",
       "base_columns": [
@@ -307,6 +312,7 @@
     },
     "commission": {
       "semantic_name": "commission",
+      "description": "GoTickets commission earned from ticket sales",
       "metric_class": "commission",
       "default_aggregation": "sum",
       "base_columns": [
@@ -362,6 +368,7 @@
     },
     "profit": {
       "semantic_name": "profit",
+      "description": "Net profit after subtracting ad cost from attributed revenue",
       "metric_class": "profit",
       "default_aggregation": "sum",
       "base_columns": [
@@ -424,6 +431,7 @@
     },
     "target roas value": {
       "semantic_name": "troas",
+      "description": "Target return on ad spend (ROAS) goal set at the campaign or ad group level",
       "metric_class": "target",
       "default_aggregation": "avg",
       "base_columns": [
@@ -485,6 +493,7 @@
     },
     "target cpa value": {
       "semantic_name": "tcpa",
+      "description": "Target cost per acquisition (CPA) goal set at the campaign or ad group level",
       "metric_class": "target",
       "default_aggregation": "avg",
       "base_columns": [
@@ -546,6 +555,7 @@
     },
     "impression share": {
       "semantic_name": "impression share",
+      "description": "Percentage of eligible impressions your ads received out of total available impressions",
       "metric_class": "share",
       "default_aggregation": "avg",
       "base_columns": [
@@ -593,6 +603,7 @@
     },
     "abs top impression share": {
       "semantic_name": "abs top impression share",
+      "description": "Percentage of impressions your ad received in the absolute top position, above all other search results",
       "metric_class": "share",
       "default_aggregation": "avg",
       "base_columns": [
@@ -640,6 +651,7 @@
     },
     "click share": {
       "semantic_name": "click share",
+      "description": "Estimated share of all achievable clicks your ads received; measures click competitiveness",
       "metric_class": "share",
       "default_aggregation": "avg",
       "base_columns": [
@@ -676,6 +688,7 @@
     },
     "exchange revenue": {
       "semantic_name": "exchange revenue",
+      "description": "Total ticket sale revenue tracked through the ClosePeer exchange benchmark dataset",
       "metric_class": "revenue",
       "default_aggregation": "sum",
       "base_columns": [
@@ -718,6 +731,7 @@
     },
     "exchange orders": {
       "semantic_name": "exchange orders",
+      "description": "Total number of ticket orders tracked through the ClosePeer exchange benchmark dataset",
       "metric_class": "orders",
       "default_aggregation": "sum",
       "base_columns": [
@@ -760,6 +774,7 @@
     },
     "conversion rate": {
       "semantic_name": "conv rate",
+      "description": "Percentage of ad clicks that resulted in a conversion (conversions / clicks)",
       "metric_class": "rate",
       "default_aggregation": "derived",
       "derived_formula": "conversions / clicks",
@@ -800,6 +815,7 @@
     },
     "click through rate": {
       "semantic_name": "ctr",
+      "description": "Percentage of ad impressions that resulted in a click (clicks / impressions)",
       "metric_class": "rate",
       "default_aggregation": "derived",
       "derived_formula": "clicks / impressions",
@@ -840,6 +856,7 @@
     },
     "cost per click": {
       "semantic_name": "cpc",
+      "description": "Average cost paid for each ad click (cost / clicks)",
       "metric_class": "unit_cost",
       "default_aggregation": "derived",
       "derived_formula": "cost / clicks",
@@ -880,6 +897,7 @@
     },
     "roi": {
       "semantic_name": "roi",
+      "description": "Return on investment as a percentage of ad cost: (profit / cost) x 100",
       "metric_class": "rate",
       "default_aggregation": "derived",
       "derived_formula": "(profit / cost) * 100",
@@ -920,6 +938,7 @@
     },
     "revenue per click": {
       "semantic_name": "rpcl",
+      "description": "Average revenue generated per ad click (revenue / clicks)",
       "metric_class": "rate",
       "default_aggregation": "derived",
       "derived_formula": "revenue / clicks",
@@ -960,6 +979,7 @@
     },
     "revenue per conversion": {
       "semantic_name": "rpc",
+      "description": "Average revenue earned per completed conversion (revenue / conversions)",
       "metric_class": "rate",
       "default_aggregation": "derived",
       "derived_formula": "revenue / conversions",
@@ -1077,7 +1097,7 @@
     "order count": "exchange orders"
   },
   "_build_summary": {
-    "metrics": 19,
+    "metrics": 20,
     "derived": 6,
     "grains": [
       "adgroup",
