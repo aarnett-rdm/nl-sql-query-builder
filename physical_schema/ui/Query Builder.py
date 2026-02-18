@@ -219,6 +219,17 @@ def post_summarize(question: str, sql: str, results_json: list) -> str:
     return r.json()["summary"]
 
 
+def post_suggest(question: str, spec: dict) -> list[str]:
+    """POST /suggest and return a list of follow-up question strings."""
+    r = requests.post(
+        f"{get_api_url()}/suggest",
+        json={"question": question, "spec": spec},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json().get("suggestions", [])
+
+
 def post_feedback(
     request_id: str,
     original_question: str,
@@ -465,8 +476,57 @@ def render_feedback_ui(msg: dict, idx: int):
 # Chat rendering
 # ---------------------------------------------------------------------------
 
+def _render_suggestions(msg: dict, idx: int, is_latest_assistant: bool) -> None:
+    """Render follow-up suggestion pills for an assistant message with SQL.
+
+    Auto-fetches suggestions from /suggest for the most recent message only
+    (to avoid spamming the LLM on every re-render). Once fetched they are
+    cached in msg["suggestions"] and shown as clickable buttons.
+    """
+    spec = msg.get("spec")
+    if not spec:
+        return
+
+    # Retrieve the original user question for this result
+    original_q = ""
+    for i in range(idx - 1, -1, -1):
+        if st.session_state.messages[i]["role"] == "user":
+            original_q = st.session_state.messages[i]["content"]
+            break
+    if not original_q:
+        return
+
+    # Auto-fetch for the latest assistant message only
+    if is_latest_assistant and msg.get("suggestions") is None and not msg.get("suggestions_fetching"):
+        msg["suggestions_fetching"] = True
+        try:
+            suggestions = post_suggest(original_q, spec)
+            msg["suggestions"] = suggestions
+        except Exception:
+            msg["suggestions"] = []  # Silently suppress — suggestions are non-critical
+        msg["suggestions_fetching"] = False
+
+    suggestions = msg.get("suggestions") or []
+    if not suggestions:
+        return
+
+    st.markdown("**💡 Follow-up questions:**")
+    cols = st.columns(len(suggestions))
+    for j, suggestion in enumerate(suggestions):
+        with cols[j]:
+            if st.button(suggestion, key=f"suggest_btn_{idx}_{j}", use_container_width=True):
+                st.session_state["prefill_question"] = suggestion
+                st.rerun()
+
+
 def render_chat_history():
     """Render all past messages from session state."""
+    # Pre-compute the index of the last assistant message with SQL (for auto-suggest)
+    last_assistant_idx = -1
+    for i, m in enumerate(st.session_state.messages):
+        if m.get("role") == "assistant" and m.get("sql"):
+            last_assistant_idx = i
+
     for idx, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -629,6 +689,10 @@ def render_chat_history():
             if msg.get("error_detail"):
                 with st.expander("Error details"):
                     st.json(msg["error_detail"])
+
+            # Follow-up suggestions (only for assistant messages with SQL)
+            if msg["role"] == "assistant" and msg.get("sql"):
+                _render_suggestions(msg, idx, is_latest_assistant=(idx == last_assistant_idx))
 
             # Feedback UI (only for assistant messages with SQL)
             if msg["role"] == "assistant" and msg.get("sql"):

@@ -977,6 +977,47 @@
       },
       "default_grain": "campaign_calendar"
     },
+    "cost per conversion": {
+      "semantic_name": "cpa",
+      "description": "Average ad spend required to achieve one conversion; also known as CPA or cost per acquisition (cost / conversions)",
+      "metric_class": "unit_cost",
+      "default_aggregation": "derived",
+      "derived_formula": "cost / conversions",
+      "base_metrics": [
+        "cost",
+        "conversions"
+      ],
+      "domains": [
+        "ads"
+      ],
+      "supported_grains": [
+        "adgroup_calendar",
+        "campaign_calendar"
+      ],
+      "grain_preference_order": [
+        "campaign_calendar",
+        "adgroup_calendar"
+      ],
+      "preferred_fact_table": {
+        "campaign_calendar": {
+            "google_ads": ["GoogleAdsCampaignPerformanceMetric"],
+            "microsoft_ads": ["MicrosoftAdsCampaignPerformanceMetric"]
+        },
+        "adgroup_calendar": {
+          "google_ads": ["GoogleAdsAdGroupPerformanceMetric"],
+          "microsoft_ads": ["MicrosoftAdsAdGroupPerformanceMetric"]
+        }
+      },
+      "rollup": {
+        "allowed": false,
+        "requires_explicit": false,
+        "from_grains": [],
+        "to_grains": [],
+        "strategy": null,
+        "notes": null
+      },
+      "default_grain": "campaign_calendar"
+    },
     "revenue per conversion": {
       "semantic_name": "rpc",
       "description": "Average revenue earned per completed conversion (revenue / conversions)",
@@ -1086,6 +1127,9 @@
     "ctr": "click through rate",
     "click through rate": "click through rate",
     "cpc": "cost per click",
+    "cpa": "cost per conversion",
+    "cost per acquisition": "cost per conversion",
+    "cost per conversion": "cost per conversion",
     "rpc": "revenue per conversion",
     "rpcl": "revenue per click",
     "roi": "roi",
@@ -1097,8 +1141,8 @@
     "order count": "exchange orders"
   },
   "_build_summary": {
-    "metrics": 20,
-    "derived": 6,
+    "metrics": 21,
+    "derived": 7,
     "grains": [
       "adgroup",
       "adgroup_calendar",

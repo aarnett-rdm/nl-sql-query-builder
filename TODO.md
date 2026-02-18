@@ -263,12 +263,13 @@ One-click download of query results from QB and MDR.
 - ~~Filename~~ → QB: `{sanitized_question}_{YYYYMMDD}.{ext}`; MDR: `mdr_comparison_{YYYYMMDD}.xlsx`
 - ~~Shared utilities~~ → `sanitize_filename()` + `build_excel_bytes()` added to `ui/shared.py`; `openpyxl>=3.1.0` added to `ui/requirements.txt`
 
-### 8.4 Auto-Suggested Follow-Up Questions — **PENDING**
+### 8.4 Auto-Suggested Follow-Up Questions — **DONE** (Feb 18, 2026)
 After each query, show 2-3 clickable follow-up question suggestions that build on the result.
-- [ ] LLM generates follow-ups given current spec + question (e.g., "Show by campaign", "Compare to last month", "Break out by platform")
-- [ ] Render as pills/buttons below the result; clicking pre-fills chat input
-- [ ] Cache suggestions per `(question, spec)` hash to avoid redundant LLM calls
-- [ ] Can reuse existing `/providers` infrastructure; fire async after result renders
+- ~~LLM generates follow-ups given current spec + question~~ → `POST /suggest` endpoint in `api/app.py`; `json_mode=True`, `temperature=0.7`
+- ~~Render as pills/buttons below the result~~ → `_render_suggestions()` in QB.py; auto-fetches for latest assistant message, shows as row of buttons
+- ~~Clicking pre-fills chat input~~ → sets `session_state["prefill_question"]`; existing prefill handler in `main()` fires it as a new query
+- ~~Cache suggestions per `(question, spec)` hash~~ → SHA-256 keyed `_suggest_cache` dict on API; evicts oldest at 500 entries
+- ~~Tests~~ → `tests/test_suggest.py` (8 tests: happy path, 503, 502, cache hit, cache miss on different question, cap at 3, malformed JSON, validation)
 
 **Why now:** Directly builds on conversational context system. Lowers the "what can I ask?" barrier for new users.
 

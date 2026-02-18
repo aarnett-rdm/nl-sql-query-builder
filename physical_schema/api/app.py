@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import datetime
+import hashlib
 import json
 import logging
 import time
@@ -101,6 +102,10 @@ _feedback_store: Optional[FeedbackStore] = None
 
 # Thread pool for running synchronous LLM calls with timeout
 _llm_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+# In-memory cache for /suggest (keyed by SHA-256 of question+spec JSON)
+_suggest_cache: Dict[str, List[str]] = {}
+_SUGGEST_CACHE_MAX = 500  # evict oldest entry when limit reached
 
 
 # ----------------------------
@@ -270,6 +275,15 @@ class SummarizeRequest(BaseModel):
 
 class SummarizeResponse(BaseModel):
     summary: str
+
+
+class SuggestRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    spec: Dict[str, Any]
+
+
+class SuggestResponse(BaseModel):
+    suggestions: List[str]
 
 
 # ----------------------------
@@ -1084,6 +1098,75 @@ def summarize_results(req: SummarizeRequest):
         return SummarizeResponse(summary=summary)
     except LLMBackendError as e:
         _log_json("summarize_llm_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
+
+@app.post("/suggest", response_model=SuggestResponse)
+def suggest_followups(req: SuggestRequest):
+    """Generate 2-3 follow-up question suggestions based on the current query.
+
+    Accepts the original question and the resolved spec.
+    Results are cached by content hash to avoid redundant LLM calls.
+    Returns 503 if no LLM is configured, 502 on LLM failure.
+    """
+    if _llm_adapter is None:
+        raise HTTPException(status_code=503, detail="LLM not available — cannot suggest follow-ups")
+
+    # Deduplicate via content hash (question + spec, keys sorted for stability)
+    raw = json.dumps({"q": req.question, "spec": req.spec}, sort_keys=True)
+    cache_key = hashlib.sha256(raw.encode()).hexdigest()
+    if cache_key in _suggest_cache:
+        return SuggestResponse(suggestions=_suggest_cache[cache_key])
+
+    system = (
+        "You are a marketing data analyst assistant. "
+        "Given a user's question and the query spec (JSON), suggest exactly 3 concise follow-up questions "
+        "that naturally build on or deepen the analysis. Each should be a complete, standalone question. "
+        "Good follow-up types: break out by a new dimension, compare to a different time period, "
+        "switch platform, add or swap a metric, or filter to a top/bottom segment. "
+        'Return ONLY valid JSON in this exact format: {{"suggestions": ["question 1", "question 2", "question 3"]}}'
+    )
+    user = (
+        f"Question: {req.question}\n\n"
+        f"Spec: {json.dumps(req.spec, indent=2)}"
+    )
+
+    request_id = _new_request_id()
+    _log_json("suggest_request", request_id=request_id, question_len=len(req.question))
+    t0 = time.time()
+
+    try:
+        result = _run_with_timeout(
+            _llm_adapter.backend.chat,
+            system,
+            user,
+            True,   # json_mode=True — structured output
+            0.7,    # temperature: warmer for varied suggestions
+            timeout_sec=config.ollama_timeout,
+        )
+
+        # Parse JSON; fall back to empty list on parse failure
+        try:
+            parsed = json.loads(result.content)
+            suggestions = [s for s in parsed.get("suggestions", []) if isinstance(s, str)][:3]
+        except (json.JSONDecodeError, AttributeError):
+            suggestions = []
+
+        # Evict oldest entry when cache is full (FIFO via dict insertion order)
+        if len(_suggest_cache) >= _SUGGEST_CACHE_MAX:
+            oldest = next(iter(_suggest_cache))
+            del _suggest_cache[oldest]
+        _suggest_cache[cache_key] = suggestions
+
+        _log_json(
+            "suggest_ok",
+            request_id=request_id,
+            elapsed_ms=int((time.time() - t0) * 1000),
+            suggestion_count=len(suggestions),
+        )
+        return SuggestResponse(suggestions=suggestions)
+    except LLMBackendError as e:
+        _log_json("suggest_llm_error", request_id=request_id, error=str(e))
         raise HTTPException(status_code=502, detail=f"LLM error: {e}")
 
 
