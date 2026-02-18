@@ -195,6 +195,75 @@ def fetch_dimension_samples(dimension: str, source_tables_str: str) -> list[str]
 
 
 @st.cache_data(ttl=3600)
+def build_schema_table_list(schema_path: str) -> list[str]:
+    """Return sorted list of all table names from physical_schema.json."""
+    with open(schema_path) as f:
+        schema_json = json.load(f)
+    return sorted(schema_json.get("tables", {}).keys())
+
+
+@st.cache_data(ttl=3600)
+def build_column_data(schema_path: str) -> dict[str, list[tuple[str, str]]]:
+    """
+    Return column names and data types per table.
+    Result: {table_name: [(col_name, data_type), ...]} in definition order.
+    """
+    with open(schema_path) as f:
+        schema_json = json.load(f)
+    result: dict[str, list[tuple[str, str]]] = {}
+    for table_name, table_def in schema_json.get("tables", {}).items():
+        result[table_name] = [
+            (col_name, col_info.get("data_type", "?"))
+            for col_name, col_info in table_def.get("columns", {}).items()
+        ]
+    return result
+
+
+@st.cache_data(ttl=3600)
+def build_unregistered_neighbors(
+    schema_path: str, table_names: tuple[str, ...], platform: str
+) -> tuple[list[str], list[dict]]:
+    """
+    Fetch join-planner neighbors for tables that aren't in the metric registry.
+    Cached per unique (table_names, platform) combination.
+    Returns (extra_nodes, extra_edges) to merge into the main graph.
+    """
+    from tools.join_planner import PhysicalSchema
+
+    with open(schema_path) as f:
+        schema_payload = json.load(f)
+
+    schema = PhysicalSchema(schema_payload)
+    plat = None if platform == "All" else platform
+
+    extra_nodes: set[str] = set(table_names)
+    extra_edges: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    for table in table_names:
+        try:
+            for edge in schema.neighbors(table, platform=plat):
+                key = (edge.from_table, edge.to_table)
+                if key not in seen:
+                    seen.add(key)
+                    extra_edges.append({
+                        "from": edge.from_table,
+                        "to": edge.to_table,
+                        "confidence": edge.confidence,
+                        "join_cols": (
+                            f"{', '.join(edge.from_columns)}"
+                            f" → {', '.join(edge.to_columns)}"
+                        ),
+                    })
+                    extra_nodes.add(edge.from_table)
+                    extra_nodes.add(edge.to_table)
+        except Exception:
+            pass
+
+    return list(extra_nodes), extra_edges
+
+
+@st.cache_data(ttl=3600)
 def build_relationship_data(
     registry_path: str, schema_path: str, platform: str
 ) -> tuple[list[str], list[dict], list[str]]:
@@ -307,7 +376,9 @@ def build_plotly_graph(
     high_only: bool,
     usage_stats: dict,
     view_mode: str,
-    focus_table: str | None,
+    focus_tables: list[str],
+    ghost_nodes: set[str] | None = None,
+    column_data: dict | None = None,
 ) -> "go.Figure":
     """Build a Plotly network graph from node/edge data.
 
@@ -318,12 +389,18 @@ def build_plotly_graph(
         high_only: When True, omit medium/low-confidence edges.
         usage_stats: Output of build_usage_stats() — contains fact_table_counts.
         view_mode: One of "Full", "Active only", "Discovery".
-        focus_table: When set, show only this node + its direct neighbors.
+        focus_tables: When non-empty, show the union of each table's 1-hop neighbourhood.
+        ghost_nodes: Tables present in the physical schema but not the metric registry.
+                     Rendered faded (opacity 0.35) with a gray fill.
+        column_data: {table_name: [(col_name, data_type), ...]} shown in hover tooltip.
     """
     import math
 
     import networkx as nx
     import plotly.graph_objects as go
+
+    ghost_nodes = ghost_nodes or set()
+    column_data = column_data or {}
 
     fact_set = set(fact_tables)
     fact_table_counts: dict[str, int] = usage_stats.get("fact_table_counts", {})
@@ -353,13 +430,15 @@ def build_plotly_graph(
     working_nodes = list(nodes)
     working_edges = list(edges)
 
-    # Focus mode — 1-hop neighbourhood only
-    if focus_table and focus_table in working_nodes:
+    # Focus mode — union of 1-hop neighbourhoods for all selected tables
+    valid_focus = [t for t in focus_tables if t in working_nodes]
+    focus_set: set[str] = set(valid_focus)  # used later for chain-edge & node highlighting
+    if valid_focus:
         focus_edges = [
             e for e in working_edges
-            if e["from"] == focus_table or e["to"] == focus_table
+            if e["from"] in valid_focus or e["to"] in valid_focus
         ]
-        focus_nodes: set[str] = {focus_table}
+        focus_nodes: set[str] = set(valid_focus)
         for e in focus_edges:
             focus_nodes.add(e["from"])
             focus_nodes.add(e["to"])
@@ -388,18 +467,36 @@ def build_plotly_graph(
 
     pos = nx.spring_layout(G, seed=42, k=2.5)
 
+    # ------------------------------------------------------------------ bridge dims
+    # A bridge dimension is adjacent to 2+ selected fact tables.  It is the actual
+    # join path between those tables in a star schema (fact→dim←fact).
+    bridge_dims: set[str] = set()
+    if focus_set:
+        from collections import Counter
+        dim_counts: Counter[str] = Counter()
+        for u, v in G.edges():
+            if u in focus_set and v not in focus_set:
+                dim_counts[v] += 1
+            elif v in focus_set and u not in focus_set:
+                dim_counts[u] += 1
+        bridge_dims = {d for d, cnt in dim_counts.items() if cnt >= 2}
+
     # ------------------------------------------------------------------ per-node helpers (need G)
 
     def _neighbor_score(name: str) -> int:
         return sum(fact_table_counts.get(p, 0) for p in G.predecessors(name))
 
     def effective_node_color(name: str) -> str:
+        if name in ghost_nodes:
+            return "#BBBBBB"  # light gray — not in metric registry
         if view_mode == "Discovery" and name not in fact_set:
             if _neighbor_score(name) == 0:
                 return DISCOVERY_GOLD
         return node_base_color(name)
 
     def effective_node_size(name: str) -> float:
+        if name in ghost_nodes:
+            return 8  # smaller to de-emphasise unregistered tables
         if name in fact_set:
             count = fact_table_counts.get(name, 0)
             return min(12 + math.log1p(count) * 5, 32)
@@ -407,6 +504,8 @@ def build_plotly_graph(
         return min(8 + math.log1p(score) * 3, 20)
 
     def effective_node_opacity(name: str) -> float:
+        if name in ghost_nodes:
+            return 0.35  # faded — not in metric registry
         # Ghost fact tables that have never been queried (Full mode only)
         if name in fact_set and view_mode == "Full":
             return 1.0 if fact_table_counts.get(name, 0) > 0 else 0.25
@@ -416,6 +515,8 @@ def build_plotly_graph(
         successors = list(G.successors(name))
         predecessors = list(G.predecessors(name))
         text = f"<b>{name}</b><br>Type: {node_type}"
+        if name in ghost_nodes:
+            text += "<br><i>⚠ Not in metric registry — physical schema only</i>"
         if successors:
             text += "<br>Joins to: " + ", ".join(successors[:4])
             if len(successors) > 4:
@@ -431,30 +532,77 @@ def build_plotly_graph(
                 text += f"<br>Reachable via {score:,} queries"
             else:
                 text += "<br>Unexplored (no queried fact tables connect here)"
+        # Column list (capped at 10 to keep tooltip readable)
+        cols = column_data.get(name, [])
+        if cols:
+            text += "<br><br><b>Columns:</b>"
+            for col_name, dtype in cols[:10]:
+                text += f"<br>&nbsp;&nbsp;{col_name} <i>({dtype})</i>"
+            if len(cols) > 10:
+                text += f"<br>&nbsp;&nbsp;… +{len(cols) - 10} more"
         return text
 
     # ------------------------------------------------------------------ edge traces
+    #
+    # In focus mode three tiers exist:
+    #   "bridge"    — edge connects a selected table to a bridge dimension
+    #                 (shared by 2+ selected fact tables → the actual join path)
+    #   "available" — edge connects a selected table to a non-bridge neighbour
+    #   "direct"    — edge between two selected tables (rare, non-star schemas)
+    #
+    # Outside focus mode the existing confidence-based styles are used unchanged.
 
+    BRIDGE_STYLE    = dict(color="#111111", width=3.5, dash="solid")
+    AVAILABLE_STYLE = dict(color="#888888", width=1.5, dash="dash")
     conf_styles = {
-        "high": dict(color="#444444", width=2, dash="solid"),
+        "high":   dict(color="#444444", width=2,   dash="solid"),
         "medium": dict(color="#999999", width=1.5, dash="dash"),
-        "low": dict(color="#CCCCCC", width=1, dash="dot"),
+        "low":    dict(color="#CCCCCC", width=1,   dash="dot"),
     }
     conf_labels = {
-        "high": "High confidence join",
-        "medium": "Medium confidence",
-        "low": "Low confidence",
+        "high":   "High confidence join",
+        "medium": "Medium confidence join",
+        "low":    "Low confidence join",
     }
-    conf_shown = {c: False for c in conf_styles}
+    conf_shown    = {c: False for c in conf_styles}
+    bridge_shown  = False
+    avail_shown   = False
+
+    def _edge_kind(u: str, v: str) -> str:
+        if not focus_set:
+            return "conf"
+        either_selected = u in focus_set or v in focus_set
+        if not either_selected:
+            return "conf"
+        is_bridge_edge = (u in bridge_dims or v in bridge_dims)
+        if is_bridge_edge:
+            return "bridge"
+        return "available"
 
     edge_traces = []
     for u, v, data in G.edges(data=True):
-        conf = data.get("confidence", "medium")
-        style = conf_styles.get(conf, conf_styles["medium"])
         x0, y0 = pos[u]
         x1, y1 = pos[v]
-        show = not conf_shown[conf]
-        conf_shown[conf] = True
+        kind = _edge_kind(u, v)
+        if kind == "bridge":
+            style = BRIDGE_STYLE
+            show = not bridge_shown
+            bridge_shown = True
+            legend_name = "Join chain (shared dimension)"
+            legend_group = "bridge"
+        elif kind == "available":
+            style = AVAILABLE_STYLE
+            show = not avail_shown
+            avail_shown = True
+            legend_name = "Available join"
+            legend_group = "available"
+        else:
+            conf = data.get("confidence", "medium")
+            style = conf_styles.get(conf, conf_styles["medium"])
+            show = not conf_shown[conf]
+            conf_shown[conf] = True
+            legend_name = conf_labels[conf]
+            legend_group = conf
         edge_traces.append(
             go.Scatter(
                 x=[x0, x1, None],
@@ -462,8 +610,8 @@ def build_plotly_graph(
                 mode="lines",
                 line=dict(color=style["color"], width=style["width"], dash=style["dash"]),
                 hoverinfo="none",
-                name=conf_labels[conf],
-                legendgroup=conf,
+                name=legend_name,
+                legendgroup=legend_group,
                 showlegend=show,
             )
         )
@@ -475,6 +623,7 @@ def build_plotly_graph(
         "#55A868": "Dimension table",
         "#DD8452": "Mapping / Bridge table",
         DISCOVERY_GOLD: "Unexplored dimension",
+        "#BBBBBB": "Unregistered (schema only)",
     }
 
     node_traces = []
@@ -489,6 +638,10 @@ def build_plotly_graph(
         show = node_type not in type_shown
         type_shown[node_type] = True
 
+        is_selected = node in focus_set
+        is_bridge   = node in bridge_dims
+        ring_color  = "#F59E0B" if is_selected else ("#8B5CF6" if is_bridge else "white")
+        ring_width  = 4 if is_selected else (3 if is_bridge else 1)
         node_traces.append(
             go.Scatter(
                 x=[x],
@@ -496,14 +649,18 @@ def build_plotly_graph(
                 mode="markers+text",
                 text=[short_label(node)],
                 textposition="top center",
-                textfont=dict(size=10 if node in fact_set else 8),
+                textfont=dict(
+                    size=10 if node in fact_set else 8,
+                    color="#111111" if (is_selected or is_bridge) else None,
+                    weight="bold" if (is_selected or is_bridge) else None,  # type: ignore[arg-type]
+                ),
                 hovertext=[hover],
                 hoverinfo="text",
                 opacity=effective_node_opacity(node),
                 marker=dict(
-                    size=effective_node_size(node),
+                    size=effective_node_size(node) * (1.4 if is_selected else 1.0),
                     color=color,
-                    line=dict(width=1, color="white"),
+                    line=dict(width=ring_width, color=ring_color),
                 ),
                 name=node_type,
                 legendgroup=node_type,
@@ -821,22 +978,56 @@ def main():
         fact_table_counts = usage_stats.get("fact_table_counts", {})
         total_queries = usage_stats.get("total_queries", 0)
 
+        # ── Load schema-wide data (for unregistered tables + column hover) ────
+        all_schema_tables = build_schema_table_list(str(PHYSICAL_SCHEMA))
+        column_data = build_column_data(str(PHYSICAL_SCHEMA))
+        registry_node_set = set(nodes)
+        unregistered_all = sorted(t for t in all_schema_tables if t not in registry_node_set)
+
         # ── Focus table selectbox (needs node list) ───────────────────────────
         with ctrl3:
-            # Sort options: fact tables first (by query count desc), then dims alphabetically
-            fact_opts = sorted(
-                [n for n in nodes if n in set(fact_tables)],
-                key=lambda n: -fact_table_counts.get(n, 0),
-            )
-            dim_opts = sorted([n for n in nodes if n not in set(fact_tables)])
-            focus_options = ["(None — show all)"] + fact_opts + dim_opts
-            focus_raw = st.selectbox(
+            # Narrow registered tables to 1-hop neighbours of already-selected tables.
+            # Unregistered tables are always listed at the bottom for exploration.
+            # Read session state first so options are computed before the widget renders.
+            current_selection: list[str] = st.session_state.get("graph_focus_table", [])
+            fact_set_local = set(fact_tables)
+
+            if current_selection:
+                # Union of all direct neighbours of each registered selected table
+                selected_set = set(current_selection)
+                reachable: set[str] = set(current_selection)
+                for e in edges:
+                    if e["from"] in selected_set:
+                        reachable.add(e["to"])
+                    if e["to"] in selected_set:
+                        reachable.add(e["from"])
+                fact_opts = sorted(
+                    [n for n in reachable if n in fact_set_local],
+                    key=lambda n: -fact_table_counts.get(n, 0),
+                )
+                dim_opts = sorted(n for n in reachable if n not in fact_set_local)
+            else:
+                # No selection yet — show all registered tables
+                fact_opts = sorted(
+                    [n for n in nodes if n in fact_set_local],
+                    key=lambda n: -fact_table_counts.get(n, 0),
+                )
+                dim_opts = sorted(n for n in nodes if n not in fact_set_local)
+
+            # Unregistered tables always available at bottom (search to find them)
+            focus_options = fact_opts + dim_opts + unregistered_all
+            focus_tables = st.multiselect(
                 "Focus on table (1-hop view)",
                 focus_options,
                 key="graph_focus_table",
-                help="Select a table to isolate it and its direct neighbours.",
+                placeholder="(None — show all)",
+                help=(
+                    "Select one or more tables to show only those nodes and their direct "
+                    "neighbours. After selecting a table, registered neighbours narrow the "
+                    "list. Tables not in the metric registry appear greyed out at the bottom "
+                    "— select one to see its schema joins."
+                ),
             )
-            focus_table = None if focus_raw == "(None — show all)" else focus_raw
 
         # ── Usage context banner ──────────────────────────────────────────────
         if total_queries > 0:
@@ -853,26 +1044,44 @@ def main():
             st.caption("No query history found — run some queries in the Query Builder to see usage data.")
 
         # Discovery mode explanation
-        if view_mode == "Discovery" and not focus_table:
+        if view_mode == "Discovery" and not focus_tables:
             st.warning(
                 "Gold nodes = dimension tables not yet reachable from any queried fact table. "
                 "These are potential untapped analytics dimensions."
             )
 
-        if not nodes:
+        # ── Merge unregistered focused tables into the graph ─────────────────
+        unregistered_focus = tuple(t for t in focus_tables if t not in registry_node_set)
+        if unregistered_focus:
+            with st.spinner(f"Loading schema joins for {len(unregistered_focus)} unregistered table(s)…"):
+                extra_nodes, extra_edges = build_unregistered_neighbors(
+                    str(PHYSICAL_SCHEMA), unregistered_focus, graph_platform
+                )
+            existing_edge_keys = {(e["from"], e["to"]) for e in edges}
+            merged_nodes = list(registry_node_set | set(extra_nodes))
+            merged_edges = edges + [
+                e for e in extra_edges if (e["from"], e["to"]) not in existing_edge_keys
+            ]
+            ghost_nodes_set = set(extra_nodes) - registry_node_set
+        else:
+            merged_nodes, merged_edges, ghost_nodes_set = nodes, edges, set()
+
+        if not merged_nodes:
             st.warning("No table relationships found.")
         else:
             # ── Build and display the graph ───────────────────────────────────
             try:
                 import plotly.graph_objects  # noqa: F401 — confirm plotly available
                 fig = build_plotly_graph(
-                    nodes,
-                    edges,
+                    merged_nodes,
+                    merged_edges,
                     fact_tables,
                     high_only,
                     usage_stats=usage_stats,
                     view_mode=view_mode,
-                    focus_table=focus_table,
+                    focus_tables=focus_tables,
+                    ghost_nodes=ghost_nodes_set,
+                    column_data=column_data,
                 )
                 if fig is None:
                     st.warning("No nodes to display after applying filters.")
@@ -885,13 +1094,13 @@ def main():
             # ── Summary stats ─────────────────────────────────────────────────
             st.divider()
             active_edge_count = sum(
-                1 for e in edges if not high_only or e["confidence"] == "high"
+                1 for e in merged_edges if not high_only or e["confidence"] == "high"
             )
             queried_fact_count = sum(
                 1 for ft in fact_tables if fact_table_counts.get(ft, 0) > 0
             )
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Tables", len(nodes))
+            c1.metric("Tables", len(merged_nodes))
             c2.metric("Fact / Metric tables", len(fact_tables))
             c3.metric("Join edges", active_edge_count)
             c4.metric(
@@ -911,7 +1120,7 @@ def main():
                             "Join Columns": e["join_cols"],
                             "From Queries": fact_table_counts.get(e["from"], 0),
                         }
-                        for e in edges
+                        for e in merged_edges
                         if not high_only or e["confidence"] == "high"
                     ]
                 )
