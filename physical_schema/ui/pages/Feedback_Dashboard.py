@@ -11,6 +11,7 @@ This page shows:
 from __future__ import annotations
 
 import sys
+import uuid as _uuid
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,7 +23,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from tools.feedback_store import FeedbackStore  # noqa: E402
+from tools.feedback_store import CorrectionRecord, FeedbackStore  # noqa: E402
 from tools.feedback_analyzer import (  # noqa: E402
     find_metric_gaps,
     find_dimension_patterns,
@@ -39,6 +40,28 @@ from tools.feedback_analyzer import (  # noqa: E402
 FEEDBACK_FILE = _PROJECT_ROOT / "feedback" / "corrections.jsonl"
 RECOMMENDATIONS_FILE = _PROJECT_ROOT / "feedback" / "RECOMMENDATIONS.md"
 FEEDBACK_LOG_FILE = _PROJECT_ROOT / "feedback" / "FEEDBACK_LOG.md"
+
+# Stub spec used for manually-entered feedback (no real query ran)
+_STUB_SPEC: dict = {
+    "grain": None,
+    "platform": None,
+    "metrics": [],
+    "dimensions": [],
+    "filters": {"date": {}, "where": []},
+    "compare": None,
+    "post": {},
+    "clarifications": [],
+    "notes": {},
+}
+
+_CORRECTION_TYPE_MAP = {
+    "Metric Gaps": "metric_mismatch",
+    "Dimension Patterns": "dimension_wrong",
+    "Date Filters": "date_filter_wrong",
+    "Platform Aliases": "platform_wrong",
+    "Wrong Filters": "filter_wrong",
+    "Other / General observation": "other",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -84,11 +107,58 @@ def main():
     st.title("📊 Feedback Dashboard")
     st.caption("Track user corrections and system improvements")
 
+    # ── Manual feedback form (always visible) ────────────────────────────────
+    with st.expander("➕ Submit Manual Feedback", expanded=False):
+        st.caption(
+            "Log a known issue or general observation directly — "
+            "no query run required."
+        )
+        with st.form("manual_feedback_form", clear_on_submit=True):
+            mf_question = st.text_area(
+                "Describe the issue or question",
+                placeholder=(
+                    "E.g. 'When I ask for revenue by account it sometimes "
+                    "groups by campaign instead'"
+                ),
+                height=80,
+                key="mf_question",
+            )
+            mf_type_display = st.selectbox(
+                "What category best describes the issue?",
+                options=list(_CORRECTION_TYPE_MAP.keys()),
+                key="mf_type",
+            )
+            mf_notes = st.text_area(
+                "Additional notes / expected behaviour",
+                placeholder="E.g. 'Should default to AccountName, not CampaignName'",
+                height=80,
+                key="mf_notes",
+            )
+            submitted = st.form_submit_button("Submit Feedback", type="primary")
+
+        if submitted:
+            if not mf_question.strip():
+                st.warning("Please describe the issue before submitting.")
+            else:
+                record = CorrectionRecord(
+                    feedback_id=str(_uuid.uuid4()),
+                    timestamp=datetime.now().isoformat(),
+                    request_id="manual",
+                    original_question=mf_question.strip(),
+                    original_spec=_STUB_SPEC,
+                    corrected_spec=_STUB_SPEC,
+                    correction_type=_CORRECTION_TYPE_MAP[mf_type_display],
+                    notes=mf_notes.strip(),
+                )
+                FeedbackStore(FEEDBACK_FILE).append(record)
+                st.success("✅ Feedback recorded!")
+                st.rerun()
+
     # Load feedback
     records = load_feedback()
 
     if not records:
-        st.info("No feedback submitted yet. Users can submit feedback via the Query Builder.")
+        st.info("No feedback submitted yet. Users can submit feedback via the Query Builder or the form above.")
         st.markdown(
             """
             **How to collect feedback:**
@@ -148,7 +218,7 @@ def main():
     # Top issues
     st.subheader("🔥 Top Issues Detected")
 
-    tabs = st.tabs(["Metric Gaps", "Dimension Patterns", "Date Filters", "Platform Aliases"])
+    tabs = st.tabs(["Metric Gaps", "Dimension Patterns", "Date Filters", "Platform Aliases", "Wrong Filters", "Other / General Observations"])
 
     with tabs[0]:
         metric_gaps = find_metric_gaps(records)
@@ -189,6 +259,45 @@ def main():
         else:
             st.info("No platform detection gaps found.")
 
+    with tabs[4]:
+        filter_records = [r for r in records if r.correction_type == "filter_wrong"]
+        if filter_records:
+            st.caption(f"{len(filter_records)} filter issue(s) reported:")
+            for r in reversed(filter_records[-10:]):
+                with st.expander(f"[{r.timestamp[:16]}] {r.original_question[:80]}"):
+                    if r.request_id != "manual":
+                        orig_where = r.original_spec.get("filters", {}).get("where", [])
+                        corr_where = r.corrected_spec.get("filters", {}).get("where", [])
+                        if orig_where != corr_where:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.caption("**Original filters:**")
+                                st.json(orig_where)
+                            with col2:
+                                st.caption("**Corrected filters:**")
+                                st.json(corr_where)
+                    if r.notes:
+                        st.info(f"**Notes:** {r.notes}")
+                    elif r.request_id == "manual":
+                        st.caption("*(Manual entry — see question description above)*")
+        else:
+            st.info("No filter issues reported yet.")
+
+    with tabs[5]:
+        other_records = [r for r in records if r.correction_type == "other"]
+        if other_records:
+            st.caption(f"{len(other_records)} general observation(s):")
+            for r in reversed(other_records[-10:]):
+                with st.expander(f"[{r.timestamp[:16]}] {r.original_question[:80]}"):
+                    if r.notes:
+                        st.info(f"**Notes:** {r.notes}")
+                    else:
+                        st.caption("No additional notes provided.")
+                    if r.request_id == "manual":
+                        st.caption("Source: manually entered via dashboard")
+        else:
+            st.info("No general observations yet.")
+
     st.divider()
 
     # Recent feedback
@@ -198,15 +307,20 @@ def main():
         with st.expander(f"[{r.timestamp[:16]}] {r.original_question}"):
             st.write(f"**Type:** {r.correction_type.replace('_', ' ').title()}")
             st.write(f"**Feedback ID:** {r.feedback_id[:8]}...")
+            if r.request_id == "manual":
+                st.caption("Source: manually entered via dashboard")
 
             col1, col2 = st.columns(2)
 
             with col1:
-                st.caption("**What the system did:**")
-                st.json(r.original_spec)
+                if r.request_id != "manual":
+                    st.caption("**What the system did:**")
+                    st.json(r.original_spec)
+                else:
+                    st.caption("*(Manual entry — no query spec)*")
 
             with col2:
-                if r.corrected_spec != r.original_spec:
+                if r.request_id != "manual" and r.corrected_spec != r.original_spec:
                     st.caption("**What it should have been:**")
                     st.json(r.corrected_spec)
 

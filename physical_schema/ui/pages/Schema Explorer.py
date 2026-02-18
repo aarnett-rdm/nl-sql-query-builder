@@ -22,6 +22,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from tools.dimension_extractor import DimensionExtractor  # noqa: E402
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.metric_resolver import MetricRegistry  # noqa: E402
+from tools.query_history_store import QueryHistoryStore  # noqa: E402
 from ui.shared import init_fabric_state, render_fabric_sidebar  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -31,6 +32,7 @@ from ui.shared import init_fabric_state, render_fabric_sidebar  # noqa: E402
 CONFIG_DIR = _PROJECT_ROOT / "current"
 METRIC_REGISTRY = CONFIG_DIR / "metric_registry.json"
 PHYSICAL_SCHEMA = CONFIG_DIR / "physical_schema.json"
+HISTORY_PATH = _PROJECT_ROOT / "history" / "queries.jsonl"
 
 # ---------------------------------------------------------------------------
 # Helper Functions
@@ -249,28 +251,95 @@ def build_relationship_data(
     return list(nodes), edges, list(fact_tables)
 
 
+@st.cache_data(ttl=300)
+def build_usage_stats(registry_path: str, history_path: str) -> dict:
+    """
+    Read query history and metric registry to compute per-fact-table query counts.
+
+    Returns a dict with:
+        "fact_table_counts"  : {table_name: int}  — unique queries that used each fact table
+        "total_queries"      : int
+        "most_queried_fact"  : str | None
+    """
+    # Build metric → fact_table(s) lookup from registry
+    with open(registry_path) as f:
+        registry_json = json.load(f)
+
+    metric_to_facts: dict[str, set] = {}
+    for metric_key, metric_def in registry_json["metrics"].items():
+        tables: set[str] = set()
+        for grain_dict in metric_def.get("preferred_fact_table", {}).values():
+            for tbl_list in grain_dict.values():
+                tables.update(tbl_list)
+        metric_to_facts[metric_key] = tables
+
+    # Tally query counts per fact table from history
+    fact_table_counts: dict[str, int] = {}
+    try:
+        store = QueryHistoryStore(Path(history_path))
+        records = store.load_all()
+    except Exception:
+        records = []
+
+    for record in records:
+        # Deduplicate: count each fact table at most once per query
+        queried_fact_tables: set[str] = set()
+        for metric in record.metrics:
+            queried_fact_tables.update(metric_to_facts.get(metric, set()))
+        for ft in queried_fact_tables:
+            fact_table_counts[ft] = fact_table_counts.get(ft, 0) + 1
+
+    most_queried = (
+        max(fact_table_counts, key=fact_table_counts.get) if fact_table_counts else None
+    )
+
+    return {
+        "fact_table_counts": fact_table_counts,
+        "total_queries": len(records),
+        "most_queried_fact": most_queried,
+    }
+
+
 def build_plotly_graph(
     nodes: list[str],
     edges: list[dict],
     fact_tables: list[str],
     high_only: bool,
+    usage_stats: dict,
+    view_mode: str,
+    focus_table: str | None,
 ) -> "go.Figure":
-    """Build a Plotly network graph from node/edge data."""
+    """Build a Plotly network graph from node/edge data.
+
+    Args:
+        nodes: All table names in the graph.
+        edges: Join edge dicts with keys: from, to, confidence, join_cols.
+        fact_tables: Subset of nodes that are fact/metric tables.
+        high_only: When True, omit medium/low-confidence edges.
+        usage_stats: Output of build_usage_stats() — contains fact_table_counts.
+        view_mode: One of "Full", "Active only", "Discovery".
+        focus_table: When set, show only this node + its direct neighbors.
+    """
+    import math
+
     import networkx as nx
     import plotly.graph_objects as go
 
     fact_set = set(fact_tables)
+    fact_table_counts: dict[str, int] = usage_stats.get("fact_table_counts", {})
     MAPPING_KEYWORDS = {"entitymap", "map", "mapping", "bridge", "xref", "junction"}
+    DISCOVERY_GOLD = "#F59E0B"  # amber — unexplored dimension tables
 
-    def node_color(name: str) -> str:
+    # ------------------------------------------------------------------ helpers
+
+    def node_base_color(name: str) -> str:
         if name in fact_set:
-            return "#4C72B0"  # blue — fact/metric table
+            return "#4C72B0"
         if any(k in name.lower() for k in MAPPING_KEYWORDS):
-            return "#DD8452"  # orange — mapping/bridge table
-        return "#55A868"  # green — dimension table
+            return "#DD8452"
+        return "#55A868"
 
     def short_label(name: str) -> str:
-        """Shorten long table names for display."""
         label = name
         label = label.replace("GoogleAds", "GA·")
         label = label.replace("MicrosoftAds", "MS·")
@@ -279,10 +348,37 @@ def build_plotly_graph(
         label = label.replace("BidChange", "Bid")
         return label
 
-    # Build NetworkX graph
+    # ------------------------------------------------------------------ filter
+
+    working_nodes = list(nodes)
+    working_edges = list(edges)
+
+    # Focus mode — 1-hop neighbourhood only
+    if focus_table and focus_table in working_nodes:
+        focus_edges = [
+            e for e in working_edges
+            if e["from"] == focus_table or e["to"] == focus_table
+        ]
+        focus_nodes: set[str] = {focus_table}
+        for e in focus_edges:
+            focus_nodes.add(e["from"])
+            focus_nodes.add(e["to"])
+        working_nodes = [n for n in working_nodes if n in focus_nodes]
+        working_edges = focus_edges
+
+    # Active only — remove fact tables with zero queries and their orphaned dims
+    elif view_mode == "Active only":
+        active_facts = {ft for ft in fact_tables if fact_table_counts.get(ft, 0) > 0}
+        keep_edges = [e for e in working_edges if e["from"] in active_facts]
+        reachable = {e["from"] for e in keep_edges} | {e["to"] for e in keep_edges}
+        working_nodes = [n for n in working_nodes if n in reachable]
+        working_edges = keep_edges
+
+    # ------------------------------------------------------------------ build graph
+
     G = nx.DiGraph()
-    G.add_nodes_from(nodes)
-    for e in edges:
+    G.add_nodes_from(working_nodes)
+    for e in working_edges:
         if high_only and e["confidence"] != "high":
             continue
         G.add_edge(e["from"], e["to"], confidence=e["confidence"], join_cols=e["join_cols"])
@@ -292,13 +388,63 @@ def build_plotly_graph(
 
     pos = nx.spring_layout(G, seed=42, k=2.5)
 
-    # --- Edge traces (one per confidence level for legend) ---
+    # ------------------------------------------------------------------ per-node helpers (need G)
+
+    def _neighbor_score(name: str) -> int:
+        return sum(fact_table_counts.get(p, 0) for p in G.predecessors(name))
+
+    def effective_node_color(name: str) -> str:
+        if view_mode == "Discovery" and name not in fact_set:
+            if _neighbor_score(name) == 0:
+                return DISCOVERY_GOLD
+        return node_base_color(name)
+
+    def effective_node_size(name: str) -> float:
+        if name in fact_set:
+            count = fact_table_counts.get(name, 0)
+            return min(12 + math.log1p(count) * 5, 32)
+        score = _neighbor_score(name)
+        return min(8 + math.log1p(score) * 3, 20)
+
+    def effective_node_opacity(name: str) -> float:
+        # Ghost fact tables that have never been queried (Full mode only)
+        if name in fact_set and view_mode == "Full":
+            return 1.0 if fact_table_counts.get(name, 0) > 0 else 0.25
+        return 1.0
+
+    def build_hover(name: str, node_type: str) -> str:
+        successors = list(G.successors(name))
+        predecessors = list(G.predecessors(name))
+        text = f"<b>{name}</b><br>Type: {node_type}"
+        if successors:
+            text += "<br>Joins to: " + ", ".join(successors[:4])
+            if len(successors) > 4:
+                text += f" (+{len(successors) - 4} more)"
+        if predecessors:
+            text += "<br>Referenced by: " + ", ".join(predecessors[:4])
+        if name in fact_set:
+            count = fact_table_counts.get(name, 0)
+            text += f"<br><b>Queries: {count:,}</b>" if count else "<br>Queries: 0 (never queried)"
+        else:
+            score = _neighbor_score(name)
+            if score > 0:
+                text += f"<br>Reachable via {score:,} queries"
+            else:
+                text += "<br>Unexplored (no queried fact tables connect here)"
+        return text
+
+    # ------------------------------------------------------------------ edge traces
+
     conf_styles = {
         "high": dict(color="#444444", width=2, dash="solid"),
         "medium": dict(color="#999999", width=1.5, dash="dash"),
         "low": dict(color="#CCCCCC", width=1, dash="dot"),
     }
-    conf_labels = {"high": "High confidence join", "medium": "Medium confidence", "low": "Low confidence"}
+    conf_labels = {
+        "high": "High confidence join",
+        "medium": "Medium confidence",
+        "low": "Low confidence",
+    }
     conf_shown = {c: False for c in conf_styles}
 
     edge_traces = []
@@ -322,35 +468,24 @@ def build_plotly_graph(
             )
         )
 
-    # --- Node traces (grouped by type for legend) ---
-    type_groups = {
-        "Fact / Metric table": ("blue", []),
-        "Dimension table": ("green", []),
-        "Mapping / Bridge table": ("orange", []),
-    }
+    # ------------------------------------------------------------------ node traces
+
     color_to_type = {
         "#4C72B0": "Fact / Metric table",
         "#55A868": "Dimension table",
         "#DD8452": "Mapping / Bridge table",
+        DISCOVERY_GOLD: "Unexplored dimension",
     }
 
     node_traces = []
     type_shown: dict[str, bool] = {}
 
     for node in G.nodes():
-        color = node_color(node)
-        node_type = color_to_type[color]
+        color = effective_node_color(node)
+        node_type = color_to_type.get(color, "Dimension table")
         x, y = pos[node]
 
-        # Build hover text
-        successors = list(G.successors(node))
-        predecessors = list(G.predecessors(node))
-        hover = f"<b>{node}</b><br>Type: {node_type}"
-        if successors:
-            hover += "<br>Joins to: " + ", ".join(successors[:4])
-        if predecessors:
-            hover += "<br>Referenced by: " + ", ".join(predecessors[:4])
-
+        hover = build_hover(node, node_type)
         show = node_type not in type_shown
         type_shown[node_type] = True
 
@@ -361,10 +496,15 @@ def build_plotly_graph(
                 mode="markers+text",
                 text=[short_label(node)],
                 textposition="top center",
-                textfont=dict(size=8),
+                textfont=dict(size=10 if node in fact_set else 8),
                 hovertext=[hover],
                 hoverinfo="text",
-                marker=dict(size=14, color=color, line=dict(width=1, color="white")),
+                opacity=effective_node_opacity(node),
+                marker=dict(
+                    size=effective_node_size(node),
+                    color=color,
+                    line=dict(width=1, color="white"),
+                ),
                 name=node_type,
                 legendgroup=node_type,
                 showlegend=show,
@@ -628,18 +768,32 @@ def main():
         st.header("Table Relationships")
         st.caption(
             "Visual map of fact tables (from the metric registry) and their dimension joins. "
-            "Hover over a node for details."
+            "Node size reflects query activity. Hover over a node for details."
         )
 
-        # Controls
-        col1, col2 = st.columns([2, 2])
-        with col1:
+        # ── Controls row ──────────────────────────────────────────────────────
+        ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([2, 2, 3, 2])
+        with ctrl1:
             graph_platform = st.selectbox(
                 "Filter edges by platform",
                 ["All", "google_ads", "microsoft_ads", "exchange", "gotickets"],
                 key="graph_platform",
             )
-        with col2:
+        with ctrl2:
+            view_mode = st.radio(
+                "View mode",
+                ["Full", "Active only", "Discovery"],
+                horizontal=True,
+                key="graph_view_mode",
+                help=(
+                    "**Full** — show all tables; ghosted nodes were never queried.\n\n"
+                    "**Active only** — hide fact tables with no query history and their "
+                    "orphaned dimensions.\n\n"
+                    "**Discovery** — highlight dimension tables unreachable from any queried "
+                    "fact table (potential untapped analytics)."
+                ),
+            )
+        with ctrl4:
             high_only = st.checkbox(
                 "Show high-confidence joins only",
                 value=False,
@@ -647,7 +801,7 @@ def main():
                 help="Hides medium/low confidence inferred joins to reduce clutter",
             )
 
-        # Load graph data
+        # ── Load graph data & usage stats ────────────────────────────────────
         try:
             with st.spinner("Building relationship graph..."):
                 nodes, edges, fact_tables = build_relationship_data(
@@ -663,13 +817,63 @@ def main():
             st.error(f"Failed to build relationship data: {e}")
             st.stop()
 
+        usage_stats = build_usage_stats(str(METRIC_REGISTRY), str(HISTORY_PATH))
+        fact_table_counts = usage_stats.get("fact_table_counts", {})
+        total_queries = usage_stats.get("total_queries", 0)
+
+        # ── Focus table selectbox (needs node list) ───────────────────────────
+        with ctrl3:
+            # Sort options: fact tables first (by query count desc), then dims alphabetically
+            fact_opts = sorted(
+                [n for n in nodes if n in set(fact_tables)],
+                key=lambda n: -fact_table_counts.get(n, 0),
+            )
+            dim_opts = sorted([n for n in nodes if n not in set(fact_tables)])
+            focus_options = ["(None — show all)"] + fact_opts + dim_opts
+            focus_raw = st.selectbox(
+                "Focus on table (1-hop view)",
+                focus_options,
+                key="graph_focus_table",
+                help="Select a table to isolate it and its direct neighbours.",
+            )
+            focus_table = None if focus_raw == "(None — show all)" else focus_raw
+
+        # ── Usage context banner ──────────────────────────────────────────────
+        if total_queries > 0:
+            queried_fact_count = sum(
+                1 for ft in fact_tables if fact_table_counts.get(ft, 0) > 0
+            )
+            most_queried = usage_stats.get("most_queried_fact", "")
+            st.info(
+                f"Based on **{total_queries:,}** queries in history — "
+                f"**{queried_fact_count} of {len(fact_tables)}** fact tables have been queried. "
+                + (f"Most queried: **{most_queried}**" if most_queried else "")
+            )
+        else:
+            st.caption("No query history found — run some queries in the Query Builder to see usage data.")
+
+        # Discovery mode explanation
+        if view_mode == "Discovery" and not focus_table:
+            st.warning(
+                "Gold nodes = dimension tables not yet reachable from any queried fact table. "
+                "These are potential untapped analytics dimensions."
+            )
+
         if not nodes:
             st.warning("No table relationships found.")
         else:
-            # Build and display the graph
+            # ── Build and display the graph ───────────────────────────────────
             try:
                 import plotly.graph_objects  # noqa: F401 — confirm plotly available
-                fig = build_plotly_graph(nodes, edges, fact_tables, high_only)
+                fig = build_plotly_graph(
+                    nodes,
+                    edges,
+                    fact_tables,
+                    high_only,
+                    usage_stats=usage_stats,
+                    view_mode=view_mode,
+                    focus_table=focus_table,
+                )
                 if fig is None:
                     st.warning("No nodes to display after applying filters.")
                 else:
@@ -678,17 +882,25 @@ def main():
                 st.error("Plotly not installed. Run `pip install plotly` in your UI environment.")
                 st.stop()
 
-            # Summary stats below the graph
+            # ── Summary stats ─────────────────────────────────────────────────
             st.divider()
-            c1, c2, c3 = st.columns(3)
+            active_edge_count = sum(
+                1 for e in edges if not high_only or e["confidence"] == "high"
+            )
+            queried_fact_count = sum(
+                1 for ft in fact_tables if fact_table_counts.get(ft, 0) > 0
+            )
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric("Tables", len(nodes))
             c2.metric("Fact / Metric tables", len(fact_tables))
-            c3.metric(
-                "Join edges",
-                sum(1 for e in edges if not high_only or e["confidence"] == "high"),
+            c3.metric("Join edges", active_edge_count)
+            c4.metric(
+                "Queried fact tables",
+                f"{queried_fact_count} / {len(fact_tables)}",
+                help="Fact tables that appear in at least one query in history",
             )
 
-            # Edge table (expandable)
+            # ── Edge table (expandable) ───────────────────────────────────────
             with st.expander("View all join edges"):
                 edge_df = pd.DataFrame(
                     [
@@ -697,12 +909,14 @@ def main():
                             "To Table": e["to"],
                             "Confidence": e["confidence"],
                             "Join Columns": e["join_cols"],
+                            "From Queries": fact_table_counts.get(e["from"], 0),
                         }
                         for e in edges
                         if not high_only or e["confidence"] == "high"
                     ]
                 )
                 if not edge_df.empty:
+                    edge_df = edge_df.sort_values("From Queries", ascending=False)
                     st.dataframe(edge_df, use_container_width=True, hide_index=True)
                 else:
                     st.caption("No edges match the current filter.")
