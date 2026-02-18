@@ -240,14 +240,11 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 
 ## Priority 8: Next Up
 
-### 8.1 Automatic LLM Failover — **PENDING**
-Groq → Ollama (or vice versa) automatic fallback when primary provider fails or times out.
-- [ ] `build_llm_adapter()` tries primary, catches `LLMBackendError`, falls back to secondary
-- [ ] Sidebar shows which provider is active (primary vs. fallback)
-- [ ] Config: `NL_SQL_LLM_FALLBACK` env var
-- [ ] Test: mock primary failure → verify fallback produces valid spec
-
-**Why now:** Infrastructure is ready (both backends implement `LLMBackend` protocol). Groq has rate limits that hit in practice.
+### 8.1 Automatic LLM Failover — **DONE** (Feb 18, 2026)
+- ~~`build_llm_adapter()` tries primary, catches `LLMBackendError`, falls back to secondary~~ → `FailoverBackend` in `tools/llm_adapter.py`
+- ~~Sidebar shows which provider is active (primary vs. fallback)~~ → orange `st.warning` when failover is active
+- ~~Config: `NL_SQL_LLM_FALLBACK` env var~~ → `tools/config.py` + `.env.example`
+- ~~Test: mock primary failure → verify fallback produces valid spec~~ → `tests/test_failover_backend.py` (12 tests)
 
 ### 8.2 Natural Language Result Summarization — **PENDING**
 After query runs and results are displayed, use the LLM to generate a 2-3 sentence plain-English summary of what the data shows.
