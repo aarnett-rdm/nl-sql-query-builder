@@ -95,6 +95,22 @@
     }
   },
   {
+    "question": "Show clicks by campaign last 7 days, exclude campaigns with 'test' in the name",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["clicks"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "where": [{"field": "CampaignName", "op": "not_contains", "value": "test", "case_insensitive": true}]
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "'exclude X in the name' / 'without X' / 'remove campaigns with X' -> not_contains on CampaignName. Renders as NOT LIKE '%value%'."
+  },
+  {
     "question": "Show revenue by account where state is Minnesota month to date",
     "spec": {
       "grain": null,

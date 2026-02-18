@@ -58,6 +58,9 @@ physical_schema/feedback/*.jsonl
 physical_schema/feedback/corrections.jsonl
 physical_schema/feedback/RECOMMENDATIONS.md
 
+# Query history & favorites (user-specific local data)
+physical_schema/history/
+
 # Eval run outputs (keep dataset, exclude runs)
 physical_schema/evals/run_*.json
 

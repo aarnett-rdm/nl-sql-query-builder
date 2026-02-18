@@ -244,17 +244,19 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 - Fabric integration for sample data preview (requires connection)
 - Session state sharing with chat page for selected metrics
 
-### 7.3 Query History, Favorites & Sharing
-- [ ] Query history storage — SQLite or JSONL storage of all queries with NL question, spec, SQL, timestamp, row count
-- [ ] History UI page — Chronological list with search/filter, re-run and edit buttons
-- [ ] Favorites/bookmarks — Star queries, add names/descriptions/tags
-- [ ] Query versioning — Track iterations of the same logical query, show diffs
-- [ ] Shareable URLs — Generate persistent URLs that encode query specs (base64 in URL params)
-- [ ] Export query definitions — Download spec JSON or SQL for external use
-- [ ] Team sharing — Optional: Multi-user query library (requires auth)
-- [ ] Query collections — Group related queries into folders/projects
+### 7.3 Query History, Favorites & Sharing — **DONE** (Feb 17, 2026)
+- ~~Query history storage~~ — JSONL store at `history/queries.jsonl` (`tools/query_history_store.py`)
+- ~~History UI page~~ — `ui/pages/Query_History.py`: chronological list, search/filter by keyword/platform/date range, re-run button
+- ~~Favorites/bookmarks~~ — Star from history, add name/description/tags, stored in `history/favorites.json` (`tools/favorites_store.py`)
+- ~~Upvoting~~ — `⬆ Upvote` button increments vote count; favorites sorted by votes descending
+- ~~Shareable URLs~~ — "🔗 Share" shows `?q=<encoded question>` URL; QB auto-submits on page load with that param
+- Query versioning — deferred (low value vs. complexity)
+- Export query definitions — deferred
+- Team sharing — out of scope (requires auth)
+- Query collections — deferred
 
 **Value:** Makes queries reusable and shareable, builds institutional knowledge over time
+**Files:** `tools/query_history_store.py`, `tools/favorites_store.py`, `ui/pages/Query_History.py`; QB.py modified
 
 ### 7.4 Feedback & Continuous Improvement System — **DONE** (Feb 16, 2026)
 - ~~Feedback UI in Query Builder~~ → 👍👎 buttons after each SQL query, expandable correction form with 6 correction types

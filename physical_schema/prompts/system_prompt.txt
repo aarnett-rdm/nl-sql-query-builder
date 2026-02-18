@@ -54,8 +54,9 @@ You MUST respond with valid JSON matching this exact schema:
    - "YTD" / "year to date" = January 1 of current year through today
    - "Q1 2025" = 2025-01-01 through 2025-03-31 (and so on for Q2, Q3, Q4)
 
-6. **filters.where** - Generic filters. Supported operators: =, !=, >, <, >=, <=, contains
+6. **filters.where** - Generic filters. Supported operators: =, !=, >, <, >=, <=, contains, not_contains
    - Use "case_insensitive": true for text comparisons.
+   - Use "not_contains" for exclusion patterns like "exclude X", "without X", "not containing X", "remove X" (renders as NOT LIKE '%value%').
    - Field names must be physical column names from the schema.
 
 7. **filters.campaign** - Campaign name text search. Use when user mentions campaign names or keywords.
@@ -69,6 +70,7 @@ You MUST respond with valid JSON matching this exact schema:
    - Missing metrics -> ask what metrics they want.
    - Ambiguous columns -> ask which table/entity they mean.
    - Missing date range -> do NOT clarify (the system has defaults).
+   - If a previous spec is provided in [CONTEXT FROM PREVIOUS QUERY], do NOT clarify any field that is already set there (metrics, platform, grain, date, dimensions). Inherit those values silently.
 
 ## Metric Synonyms
 {metric_synonyms}

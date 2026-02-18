@@ -407,6 +407,10 @@ def _build_where_filters_predicates(
             lit = f"%{val.lower() if ci else val}%"
             expr = f"LOWER({expr})" if ci else expr
             preds.append(f"{expr} LIKE {_sql_string_literal(lit)}")
+        elif op == "not_contains":
+            lit = f"%{val.lower() if ci else val}%"
+            expr = f"LOWER({expr})" if ci else expr
+            preds.append(f"{expr} NOT LIKE {_sql_string_literal(lit)}")
         elif op in (">", "<", ">=", "<=", "!="):
             # Numeric comparison if value looks numeric, otherwise string
             try:

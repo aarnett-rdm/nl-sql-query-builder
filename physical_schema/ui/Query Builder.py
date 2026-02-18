@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import sys
 import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -24,8 +26,15 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
+from tools.query_history_store import QueryHistoryStore, QueryRecord  # noqa: E402
 from ui.shared import format_results, build_totals_row, init_fabric_state, render_fabric_sidebar  # noqa: E402
 from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Query history store (module-level singleton)
+# ---------------------------------------------------------------------------
+
+_history_store = QueryHistoryStore(_PROJECT_ROOT / "history" / "queries.jsonl")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -90,6 +99,39 @@ def clear_context() -> None:
     st.session_state.ctx_spec = None
     st.session_state.ctx_question = None
     st.session_state.ctx_time = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Query history helpers
+# ---------------------------------------------------------------------------
+
+
+def _save_to_history(
+    question: str,
+    sql: str,
+    spec: dict,
+    request_id: str,
+    row_count: int | None = None,
+) -> None:
+    """Persist a successful query to the append-only history store."""
+    try:
+        record = QueryRecord(
+            history_id=str(uuid.uuid4()),
+            timestamp=datetime.now().isoformat(),
+            request_id=request_id,
+            user_question=question,
+            spec=spec,
+            sql=sql,
+            platform=spec.get("platform", ""),
+            metrics=spec.get("metrics", []),
+            dimensions=spec.get("dimensions", []),
+            grain=spec.get("grain", ""),
+            row_count=row_count,
+            parser_used=spec.get("notes", {}).get("parser"),
+        )
+        _history_store.append(record)
+    except Exception:
+        pass  # Never let history persistence break the main flow
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +539,7 @@ def render_chat_history():
 
                         try:
                             fig = create_chart(df, effective_chart_type, chart_config)
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, use_container_width=True, key=f"chart_{idx}")
                         except Exception as e:
                             st.error(f"Chart generation failed: {e}")
 
@@ -654,6 +696,7 @@ def handle_query_response(data: dict):
                 break
         if user_question:
             save_context(user_question, spec)
+            _save_to_history(user_question, sql, spec, request_id)
 
     elif clars:
         # Need clarification
@@ -715,6 +758,38 @@ def main():
     )
 
     render_sidebar()
+
+    # Handle re-run from Query History: prefill_question set via session state
+    if "prefill_question" in st.session_state and st.session_state.prefill_question:
+        prefill = st.session_state.pop("prefill_question")
+        st.info(f"Re-running: *{prefill}*")
+        append_user_message(prefill)
+        with st.spinner("Generating query..."):
+            try:
+                data = post_query(prefill)
+                handle_query_response(data)
+            except requests.HTTPError as e:
+                handle_http_error(e)
+            except Exception as e:
+                append_assistant_message("Something went wrong.", error_detail={"error": str(e)})
+        st.rerun()
+
+    # Handle shareable URL: ?q=<encoded question>
+    q_param = st.query_params.get("q", "")
+    if q_param and not st.session_state.get("_q_param_handled"):
+        st.session_state["_q_param_handled"] = True
+        st.query_params.clear()
+        append_user_message(q_param)
+        with st.spinner("Generating query..."):
+            try:
+                data = post_query(q_param)
+                handle_query_response(data)
+            except requests.HTTPError as e:
+                handle_http_error(e)
+            except Exception as e:
+                append_assistant_message("Something went wrong.", error_detail={"error": str(e)})
+        st.rerun()
+
     render_chat_history()
 
     # Show clarification form if pending

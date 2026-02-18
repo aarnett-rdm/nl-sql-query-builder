@@ -188,9 +188,16 @@ class PromptBuilder:
                 "[CONTEXT FROM PREVIOUS QUERY]\n"
                 f'Previous question: "{prev_q}"\n'
                 f"Previous spec: {prev_spec_str}\n\n"
-                "If the new question is a follow-up, keep any unchanged fields "
-                "(metrics, platform, grain, date filter, dimensions) from the previous spec. "
-                "If it is a completely new question, ignore the context above.\n"
+                "FOLLOW-UP RULES:\n"
+                "1. Use the previous spec as the BASE. Start with all its fields as defaults.\n"
+                "2. Only modify fields the user explicitly mentions in the new question.\n"
+                "3. Short modification phrases ('remove X', 'add filter', 'change date', 'exclude Y', "
+                "'now show', 'same but') are follow-ups — ALWAYS inherit metrics, platform, grain, "
+                "dimensions, and date from the previous spec unless the user changes them.\n"
+                "4. NEVER add a clarification for metrics, platform, or date if they are already "
+                "set in the previous spec.\n"
+                "5. Only treat the question as completely new if it introduces an entirely different "
+                "subject with no connection to the previous query.\n"
                 "[END CONTEXT]\n"
             )
 
@@ -346,7 +353,7 @@ def validate_spec(spec: Dict[str, Any], schema_ctx: SchemaContext) -> Tuple[bool
     # Check where filter operators
     for wf in spec.get("filters", {}).get("where", []):
         op = wf.get("op", "=")
-        if op not in ("=", "!=", ">", "<", ">=", "<=", "contains", "in", "not in"):
+        if op not in ("=", "!=", ">", "<", ">=", "<=", "contains", "not_contains", "in", "not in"):
             warnings.append(f"Unknown where filter operator: '{op}'")
 
     is_valid = not any("Unknown metric" in w for w in warnings)
