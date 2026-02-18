@@ -9,6 +9,9 @@ Provides common functionality for:
 
 from __future__ import annotations
 
+import io
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -127,6 +130,80 @@ def build_totals_row(df: pd.DataFrame) -> pd.DataFrame | None:
                 totals[col] = col_sums[col]
 
     return pd.DataFrame([totals], columns=df.columns)
+
+
+# ---------------------------------------------------------------------------
+# Export utilities
+# ---------------------------------------------------------------------------
+
+def sanitize_filename(text: str, max_len: int = 50) -> str:
+    """Convert arbitrary text into a safe filename stem (no extension).
+
+    Strips non-word characters, collapses whitespace to underscores, and
+    truncates to max_len.  Falls back to "export" for empty input.
+    """
+    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE)
+    text = re.sub(r"\s+", "_", text.strip())
+    return text[:max_len].strip("_") or "export"
+
+
+def build_excel_bytes(sheets: dict[str, pd.DataFrame]) -> bytes:
+    """Build an in-memory Excel workbook with one sheet per DataFrame.
+
+    Applies column number formatting:
+      - Currency columns ($#,##0.00)
+      - Rate/percentage columns (0.00%)
+      - Integer columns (#,##0)
+      - Other numeric columns (#,##0.00)
+
+    Args:
+        sheets: Mapping of sheet_name → DataFrame.  DataFrames with a named
+                index (e.g., MDR summary matrix) are reset so the index
+                becomes the first column.
+
+    Returns:
+        Raw bytes of the .xlsx file, ready for st.download_button().
+    """
+    from openpyxl.utils import get_column_letter
+
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for sheet_name, df in sheets.items():
+            # Promote named index to a regular column (e.g., MDR "Date Range" index)
+            df_out = df.reset_index() if df.index.name else df.copy()
+            safe_sheet = sheet_name[:31]  # Excel sheet-name limit
+            df_out.to_excel(writer, sheet_name=safe_sheet, index=False)
+
+            ws = writer.sheets[safe_sheet]
+
+            # Apply per-column number format + auto-width
+            for col_idx, col_name in enumerate(df_out.columns, start=1):
+                col_letter = get_column_letter(col_idx)
+                col_lower = str(col_name).lower().replace("_", " ").strip()
+
+                # Auto-width: longest value or header, capped at 30
+                col_width = max(
+                    len(str(col_name)),
+                    max((len(str(ws.cell(r, col_idx).value or "")) for r in range(2, ws.max_row + 1)), default=0),
+                )
+                ws.column_dimensions[col_letter].width = min(col_width + 2, 30)
+
+                if not pd.api.types.is_numeric_dtype(df_out[col_name]):
+                    continue  # no number format for text columns
+
+                if any(kw in col_lower for kw in _CURRENCY_COLS):
+                    num_fmt = '$#,##0.00'
+                elif any(kw in col_lower for kw in _RATE_COLS):
+                    num_fmt = '0.00%'
+                elif pd.api.types.is_integer_dtype(df_out[col_name]):
+                    num_fmt = '#,##0'
+                else:
+                    num_fmt = '#,##0.00'
+
+                for row_idx in range(2, ws.max_row + 1):
+                    ws.cell(row=row_idx, column=col_idx).number_format = num_fmt
+
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------

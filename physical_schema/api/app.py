@@ -262,6 +262,16 @@ class ProviderSwitchResponse(BaseModel):
     available: bool
 
 
+class SummarizeRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    sql: str = Field(min_length=1, max_length=50000)
+    results_json: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SummarizeResponse(BaseModel):
+    summary: str
+
+
 # ----------------------------
 # API Key stub (no enforcement)
 # ----------------------------
@@ -1021,6 +1031,60 @@ def switch_provider(req: ProviderSwitchRequest):
             status_code=500,
             detail=f"Failed to switch to '{req.provider}': {exc}",
         )
+
+
+@app.post("/summarize", response_model=SummarizeResponse)
+def summarize_results(req: SummarizeRequest):
+    """Generate a 2-3 sentence plain-English summary of query results.
+
+    Accepts the original question, the generated SQL, and the result rows.
+    Uses the active LLM backend (prefers Groq for low latency).
+    Returns 503 if no LLM is configured, 502 on LLM failure.
+    """
+    if _llm_adapter is None:
+        raise HTTPException(status_code=503, detail="LLM not available — cannot summarize results")
+
+    # Truncate results to keep tokens manageable (first 50 rows, hard cap 8k chars)
+    rows = req.results_json[:50]
+    results_str = json.dumps(rows, default=str, indent=2)
+    if len(results_str) > 8000:
+        results_str = results_str[:8000] + "\n... (truncated)"
+
+    system = (
+        "You are a concise marketing data analyst. "
+        "Given a user's question and the query results, write a 2-3 sentence plain-English summary "
+        "of the key insight. Focus on the most important numbers and trends. "
+        "Do not explain the SQL. Be specific with numbers where possible."
+    )
+    user = (
+        f"Question: {req.question}\n\n"
+        f"Results ({len(req.results_json)} row(s)):\n{results_str}"
+    )
+
+    request_id = _new_request_id()
+    _log_json("summarize_request", request_id=request_id, question_len=len(req.question), row_count=len(req.results_json))
+    t0 = time.time()
+
+    try:
+        result = _run_with_timeout(
+            _llm_adapter.backend.chat,
+            system,
+            user,
+            False,   # json_mode=False — we want free-form text
+            0.3,     # temperature: slightly warmer for natural prose
+            timeout_sec=config.ollama_timeout,
+        )
+        summary = result.content.strip()
+        _log_json(
+            "summarize_ok",
+            request_id=request_id,
+            elapsed_ms=int((time.time() - t0) * 1000),
+            output_tokens=result.output_tokens,
+        )
+        return SummarizeResponse(summary=summary)
+    except LLMBackendError as e:
+        _log_json("summarize_llm_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=502, detail=f"LLM error: {e}")
 
 
 @app.get("/healthz")

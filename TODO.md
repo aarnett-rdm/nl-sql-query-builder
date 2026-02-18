@@ -246,23 +246,22 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 - ~~Config: `NL_SQL_LLM_FALLBACK` env var~~ → `tools/config.py` + `.env.example`
 - ~~Test: mock primary failure → verify fallback produces valid spec~~ → `tests/test_failover_backend.py` (12 tests)
 
-### 8.2 Natural Language Result Summarization — **PENDING**
+### 8.2 Natural Language Result Summarization — **DONE** (Feb 18, 2026)
 After query runs and results are displayed, use the LLM to generate a 2-3 sentence plain-English summary of what the data shows.
-- [ ] POST `/summarize` endpoint: accepts `{sql, results_json, question}` → returns `{summary}`
-- [ ] In QB: show summary above the data table (collapsible, cached per query)
-- [ ] Prompt: "Given this question and results, summarize the key insight in 2-3 sentences."
-- [ ] Use Groq for low latency; stream the response if possible
+- ~~POST `/summarize` endpoint~~ → accepts `{question, sql, results_json}`, truncates to 50 rows, returns `{summary}`; 503 if no LLM, 502 on backend error
+- ~~In QB: "✨ Summarize results" button below results~~ → summary cached in `msg["summary"]`, shown in collapsible expander above chart/table
+- ~~Prompt: concise marketing analyst role, 2-3 sentences, specific numbers~~ → `json_mode=False`, `temperature=0.3`
+- ~~Tests~~ → `tests/test_summarize.py` (7 tests: happy path, 503, 502, empty results, validation, truncation)
 
 **Why now:** Core UX features are complete. This makes the tool genuinely self-service — users get an insight, not just a table.
 
-### 8.3 Export to Excel / CSV — **PENDING**
+### 8.3 Export to Excel / CSV — **DONE** (Feb 18, 2026)
 One-click download of query results from QB and MDR.
-- [ ] `st.download_button()` below results table — CSV via `df.to_csv(index=False)`
-- [ ] Optional Excel (`.xlsx`) via `openpyxl` with pre-formatted number columns
-- [ ] MDR: download the full summary matrix + all date-range detail tables as separate sheets
-- [ ] Filename: `{sanitized_question}_{date}.csv`
-
-**Why now:** Trivial to implement, frequently requested, no backend changes needed.
+- ~~`st.download_button()` below results table~~ → CSV + Excel buttons after every QB results table
+- ~~Excel (`.xlsx`) via `openpyxl`~~ → `build_excel_bytes()` in `ui/shared.py`; currency/rate/int number formats applied per column
+- ~~MDR: multi-sheet Excel~~ → "Summary Matrix" + "Campaign Details" + optional "Filtered Summary" in one `.xlsx`; also CSV buttons for individual sections
+- ~~Filename~~ → QB: `{sanitized_question}_{YYYYMMDD}.{ext}`; MDR: `mdr_comparison_{YYYYMMDD}.xlsx`
+- ~~Shared utilities~~ → `sanitize_filename()` + `build_excel_bytes()` added to `ui/shared.py`; `openpyxl>=3.1.0` added to `ui/requirements.txt`
 
 ### 8.4 Auto-Suggested Follow-Up Questions — **PENDING**
 After each query, show 2-3 clickable follow-up question suggestions that build on the result.

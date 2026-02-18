@@ -23,7 +23,7 @@ from tools.config import AppConfig  # noqa: E402
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.metric_resolver import MetricRegistry  # noqa: E402
 from tools.spec_executor import execute_spec, normalize_spec  # noqa: E402
-from ui.shared import format_results, init_fabric_state, render_fabric_sidebar  # noqa: E402
+from ui.shared import format_results, init_fabric_state, render_fabric_sidebar, sanitize_filename, build_excel_bytes  # noqa: E402
 from ui.viz_utils import create_chart  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -738,6 +738,28 @@ def main():
 
         st.caption(f"Showing {len(matrix)} date ranges × {len(matrix.columns)} metrics")
 
+        # Download buttons — summary matrix
+        _today = date.today().strftime("%Y%m%d")
+        _dl_col1, _dl_col2, _ = st.columns([1, 1, 4])
+        with _dl_col1:
+            st.download_button(
+                "⬇ CSV",
+                data=matrix.reset_index().to_csv(index=False),
+                file_name=f"mdr_summary_{_today}.csv",
+                mime="text/csv",
+                key="mdr_summary_csv",
+                use_container_width=True,
+            )
+        with _dl_col2:
+            st.download_button(
+                "⬇ Excel",
+                data=build_excel_bytes({"Summary Matrix": matrix}),
+                file_name=f"mdr_comparison_{_today}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="mdr_summary_xlsx",
+                use_container_width=True,
+            )
+
         # Campaign-level details
         if st.session_state.campaign_details is not None and not st.session_state.campaign_details.empty:
             st.divider()
@@ -942,6 +964,42 @@ def main():
                 st.caption(
                     f"Showing {len(filtered_df)} campaign-date combinations "
                     f"({num_campaigns} unique campaigns × {num_date_ranges} date ranges)"
+                )
+
+            # Download buttons — campaign details + multi-sheet Excel
+            st.markdown("**Export**")
+            _dl1, _dl2, _dl3, _ = st.columns([1, 1, 1, 3])
+            with _dl1:
+                st.download_button(
+                    "⬇ CSV (details)",
+                    data=filtered_df.to_csv(index=False),
+                    file_name=f"mdr_campaign_details_{_today}.csv",
+                    mime="text/csv",
+                    key="mdr_detail_csv",
+                    use_container_width=True,
+                )
+            with _dl2:
+                # Multi-sheet Excel: Summary + Details (+ Filtered Summary if active)
+                _sheets: dict = {"Summary Matrix": matrix, "Campaign Details": filtered_df}
+                if len(st.session_state.detail_filters) > 0 and not filtered_df.empty:
+                    _filtered_summary = create_summary_matrix(filtered_df)
+                    _sheets["Filtered Summary"] = _filtered_summary
+                st.download_button(
+                    "⬇ Excel (all sheets)",
+                    data=build_excel_bytes(_sheets),
+                    file_name=f"mdr_comparison_{_today}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="mdr_full_xlsx",
+                    use_container_width=True,
+                )
+            with _dl3:
+                st.download_button(
+                    "⬇ CSV (summary)",
+                    data=matrix.reset_index().to_csv(index=False),
+                    file_name=f"mdr_summary_{_today}.csv",
+                    mime="text/csv",
+                    key="mdr_summary_csv_detail",
+                    use_container_width=True,
                 )
 
 

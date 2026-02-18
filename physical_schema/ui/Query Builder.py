@@ -27,7 +27,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.query_history_store import QueryHistoryStore, QueryRecord  # noqa: E402
-from ui.shared import format_results, build_totals_row, init_fabric_state, render_fabric_sidebar  # noqa: E402
+from ui.shared import format_results, build_totals_row, init_fabric_state, render_fabric_sidebar, sanitize_filename, build_excel_bytes  # noqa: E402
 from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -206,6 +206,17 @@ def post_continue(spec: dict, answers: dict) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+def post_summarize(question: str, sql: str, results_json: list) -> str:
+    """POST /summarize and return the plain-English summary string."""
+    r = requests.post(
+        f"{get_api_url()}/summarize",
+        json={"question": question, "sql": sql, "results_json": results_json},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()["summary"]
 
 
 def post_feedback(
@@ -477,6 +488,33 @@ def render_chat_history():
             if msg.get("results") is not None:
                 df = msg["results"]
 
+                # --- AI Summary (above chart/table) ---
+                if msg.get("sql"):
+                    if msg.get("summary"):
+                        with st.expander("✨ AI Summary", expanded=True):
+                            st.markdown(msg["summary"])
+                    elif not msg.get("summary_fetching"):
+                        if st.button("✨ Summarize results", key=f"summarize_{idx}"):
+                            # Retrieve the original user question for this result
+                            original_q = ""
+                            for i in range(idx - 1, -1, -1):
+                                if st.session_state.messages[i]["role"] == "user":
+                                    original_q = st.session_state.messages[i]["content"]
+                                    break
+                            msg["summary_fetching"] = True
+                            with st.spinner("Generating AI summary…"):
+                                try:
+                                    summary = post_summarize(
+                                        question=original_q,
+                                        sql=msg["sql"],
+                                        results_json=df.to_dict(orient="records"),
+                                    )
+                                    msg["summary"] = summary
+                                except Exception as _e:
+                                    msg["summary"] = f"⚠ Could not generate summary: {_e}"
+                            msg["summary_fetching"] = False
+                            st.rerun()
+
                 # Detect visualization opportunity
                 viz_info = detect_visualization_opportunity(df)
 
@@ -559,6 +597,34 @@ def render_chat_history():
                 # Show data table
                 st.dataframe(format_results(df), use_container_width=True)
                 st.caption(f"Showing {len(df):,} row(s)")
+
+                # Download buttons
+                _orig_q = ""
+                for _i in range(idx - 1, -1, -1):
+                    if st.session_state.messages[_i]["role"] == "user":
+                        _orig_q = st.session_state.messages[_i]["content"]
+                        break
+                _today = datetime.now().strftime("%Y%m%d")
+                _stem = sanitize_filename(_orig_q or "query")
+                _dl_csv, _dl_xlsx, _ = st.columns([1, 1, 4])
+                with _dl_csv:
+                    st.download_button(
+                        "⬇ CSV",
+                        data=df.to_csv(index=False),
+                        file_name=f"{_stem}_{_today}.csv",
+                        mime="text/csv",
+                        key=f"dl_csv_{idx}",
+                        use_container_width=True,
+                    )
+                with _dl_xlsx:
+                    st.download_button(
+                        "⬇ Excel",
+                        data=build_excel_bytes({"Results": df}),
+                        file_name=f"{_stem}_{_today}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"dl_xlsx_{idx}",
+                        use_container_width=True,
+                    )
 
             if msg.get("error_detail"):
                 with st.expander("Error details"):
