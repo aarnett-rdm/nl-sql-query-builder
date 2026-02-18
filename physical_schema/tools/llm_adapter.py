@@ -29,10 +29,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from tools.exceptions import OllamaError
+    from tools.exceptions import OllamaError, LLMBackendError
     from tools.llm_backend import LLMBackend, ChatResult
 except ImportError:
-    from exceptions import OllamaError
+    from exceptions import OllamaError, LLMBackendError
     from llm_backend import LLMBackend, ChatResult
 
 logger = logging.getLogger("nl_sql_service.llm")
@@ -410,6 +410,86 @@ def _ensure_spec_structure(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Failover backend
+# ---------------------------------------------------------------------------
+
+class FailoverBackend:
+    """Wraps two LLMBackend instances with automatic primary→fallback switching.
+
+    On every chat() call, the primary backend is tried first.  If it raises
+    LLMBackendError the call is transparently retried on the fallback backend.
+    The `using_fallback` property reflects which backend served the last call.
+
+    is_available() returns True if EITHER backend is reachable.
+    """
+
+    def __init__(self, primary: LLMBackend, fallback: LLMBackend) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self._active: LLMBackend = primary
+        self._using_fallback: bool = False
+
+    # ------------------------------------------------------------------
+    # LLMBackend protocol
+    # ------------------------------------------------------------------
+
+    @property
+    def model_name(self) -> str:
+        return self._active.model_name
+
+    def is_available(self) -> bool:
+        return self._primary.is_available() or self._fallback.is_available()
+
+    def chat(
+        self,
+        system: str,
+        user: str,
+        json_mode: bool = True,
+        temperature: float = 0.1,
+    ) -> ChatResult:
+        try:
+            result = self._primary.chat(system, user, json_mode, temperature)
+            self._active = self._primary
+            self._using_fallback = False
+            return result
+        except LLMBackendError as primary_err:
+            logger.warning(
+                "Primary LLM backend '%s' failed — activating fallback '%s': %s",
+                self._primary.model_name,
+                self._fallback.model_name,
+                primary_err,
+            )
+            try:
+                result = self._fallback.chat(system, user, json_mode, temperature)
+                self._active = self._fallback
+                self._using_fallback = True
+                return result
+            except LLMBackendError as fallback_err:
+                raise LLMBackendError(
+                    f"Both backends failed. "
+                    f"Primary '{self._primary.model_name}': {primary_err}. "
+                    f"Fallback '{self._fallback.model_name}': {fallback_err}."
+                ) from fallback_err
+
+    # ------------------------------------------------------------------
+    # Introspection helpers (not part of protocol)
+    # ------------------------------------------------------------------
+
+    @property
+    def using_fallback(self) -> bool:
+        """True if the last chat() call was served by the fallback backend."""
+        return self._using_fallback
+
+    @property
+    def primary(self) -> LLMBackend:
+        return self._primary
+
+    @property
+    def fallback(self) -> LLMBackend:
+        return self._fallback
+
+
+# ---------------------------------------------------------------------------
 # Main adapter
 # ---------------------------------------------------------------------------
 
@@ -650,16 +730,42 @@ def build_llm_adapter(
     if backend is None:
         import os
         provider = os.getenv("NL_SQL_LLM_PROVIDER", "ollama").lower()
-        if provider == "groq":
+        fallback_provider = os.getenv("NL_SQL_LLM_FALLBACK", "").lower()
+
+        def _make_groq() -> LLMBackend:
             try:
                 from tools.groq_backend import GroqBackend
             except ImportError:
-                from groq_backend import GroqBackend
-
+                from groq_backend import GroqBackend  # type: ignore[no-redef]
             api_key = os.getenv("GROQ_API_KEY", "")
             model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-            backend = GroqBackend(api_key=api_key, model=model)
-            logger.info("Using Groq backend: model=%s", model)
+            return GroqBackend(api_key=api_key, model=model)
+
+        def _make_ollama() -> LLMBackend:
+            url = ollama_url or os.getenv("OLLAMA_URL", _DEFAULT_OLLAMA_URL)
+            model = ollama_model or os.getenv("OLLAMA_MODEL", _DEFAULT_MODEL)
+            return OllamaClient(url, model)
+
+        if provider == "groq":
+            primary_backend: LLMBackend = _make_groq()
+            logger.info("Using Groq as primary backend: model=%s", primary_backend.model_name)
+        else:
+            primary_backend = _make_ollama()
+            logger.info("Using Ollama as primary backend: model=%s", primary_backend.model_name)
+
+        if fallback_provider and fallback_provider != provider:
+            if fallback_provider == "groq":
+                fallback_backend: LLMBackend = _make_groq()
+            else:
+                fallback_backend = _make_ollama()
+            backend = FailoverBackend(primary_backend, fallback_backend)
+            logger.info(
+                "Failover enabled: primary=%s fallback=%s",
+                provider,
+                fallback_provider,
+            )
+        else:
+            backend = primary_backend
 
     return LLMAdapter(
         registry_path=registry_path,

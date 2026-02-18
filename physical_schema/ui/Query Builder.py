@@ -281,12 +281,19 @@ def render_sidebar():
                 )
                 selected = option_names[selected_idx]
 
-                # Show model caption for the selected provider
+                # Show model caption and failover status
                 selected_info = providers[selected_idx]
+                using_failover = providers_data.get("using_fallback", False)
+                fallback_name = providers_data.get("fallback_provider", "")
                 if selected_info["available"]:
                     st.caption(f"Model: {selected_info['model']}")
                 else:
                     st.caption("LLM offline — fallback to rule-based parser")
+                if using_failover and fallback_name:
+                    st.warning(
+                        f"⚠ Primary LLM down — using **{fallback_name}** as fallback",
+                        icon=None,
+                    )
 
                 # If user picked a different provider, hot-swap it
                 if selected != current:

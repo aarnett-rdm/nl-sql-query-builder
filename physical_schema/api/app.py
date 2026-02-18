@@ -40,7 +40,7 @@ from tools.exceptions import (
 )
 from tools.feedback_store import CorrectionRecord, FeedbackStore, VALID_TYPES
 from tools.feedback_analyzer import generate_recommendations, generate_feedback_log
-from tools.llm_adapter import LLMAdapter, build_llm_adapter
+from tools.llm_adapter import LLMAdapter, FailoverBackend, build_llm_adapter
 
 
 # ----------------------------
@@ -248,6 +248,8 @@ class ProviderInfo(BaseModel):
 class ProvidersResponse(BaseModel):
     current_provider: str
     providers: List[ProviderInfo]
+    using_fallback: bool = False
+    fallback_provider: str = ""
 
 
 class ProviderSwitchRequest(BaseModel):
@@ -428,6 +430,7 @@ def _startup() -> None:
                 backend_available=backend_ok,
                 model=_llm_adapter.backend.model_name,
                 provider=config.llm_provider,
+                fallback_provider=config.llm_fallback or None,
             )
         except Exception as e:
             _llm_adapter = None
@@ -943,7 +946,19 @@ def get_providers():
             configured=True,
         ),
     ]
-    return ProvidersResponse(current_provider=_current_provider, providers=providers)
+
+    # Check if the active adapter is running in failover mode
+    using_fallback = False
+    fallback_provider = config.llm_fallback
+    if _llm_adapter is not None and isinstance(_llm_adapter.backend, FailoverBackend):
+        using_fallback = _llm_adapter.backend.using_fallback
+
+    return ProvidersResponse(
+        current_provider=_current_provider,
+        providers=providers,
+        using_fallback=using_fallback,
+        fallback_provider=fallback_provider,
+    )
 
 
 @app.post("/provider", response_model=ProviderSwitchResponse)

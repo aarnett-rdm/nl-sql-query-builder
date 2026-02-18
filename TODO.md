@@ -212,71 +212,112 @@ The `rag_sql/` subsystem has critical bugs (WHERE/GROUP BY/ORDER BY never render
 
 ---
 
-## Priority 7: Enhanced User Experience
+## Priority 7: Enhanced User Experience — **ALL DONE** (Feb 17, 2026)
 
-### 7.1 Conversational Context & Query Chaining — **DONE** (Feb 17, 2026)
-- ~~Session state management~~ — `ctx_spec`, `ctx_question`, `ctx_time` stored in Streamlit session state after each successful query
-- ~~Context-aware NL parsing~~ — `LLMAdapter.parse_nl_to_spec()` and `PromptBuilder.build_user_prompt()` accept optional `previous_context` dict
-- ~~Follow-up question detection~~ — LLM handles detection; previous spec injected into prompt with merge/ignore instructions
-- ~~Incremental spec building~~ — LLM merges unchanged fields (platform, grain, date, metrics, dims) from previous spec on follow-up
-- ~~UI affordances~~ — Sidebar shows "Context active" indicator with question preview + "Clear context" button
-- ~~Context timeout~~ — Auto-clears after 10 minutes (`CONTEXT_TIMEOUT_SECS = 600`); also cleared on "Clear chat"
+### 7.1 Conversational Context & Query Chaining — **DONE**
+- ~~Session state management~~, ~~context-aware NL parsing~~, ~~follow-up detection~~, ~~context timeout~~, ~~UI affordances~~
 
-**Value:** Makes chat feel like natural conversation, enables iterative data exploration
-**Files changed:** `tools/llm_adapter.py`, `api/app.py`, `ui/Query Builder.py`
+### 7.2 Schema Explorer & Metric Catalog UI — **DONE**
+- ~~Metrics/dimensions browser~~, ~~platform/grain matrix~~, ~~search & filter~~, ~~click-to-add~~, ~~sample data preview~~, ~~table relationship diagram~~, ~~metric descriptions~~
 
-### 7.2 Schema Explorer & Metric Catalog UI — **PHASE 3 COMPLETE** (Feb 17, 2026)
-- ~~Metrics browser~~ — Tabular view with name, type, class, formula, platforms, grains; expandable formula details for derived metrics
-- ~~Dimensions browser~~ — Dynamic extraction via `tools/dimension_extractor.py`, shows source tables and occurrence count
-- ~~Platform/grain matrix~~ — Numeric grid showing metric count per platform+grain combination
-- ~~Derived metric formulas~~ — Expandable sections showing formula, base metrics, supported platforms/grains
-- ~~Search & filter~~ — Global search box, platform filter, domain filter (affects Metrics Browser tab)
-- ~~Click-to-add integration~~ — Metric selection with session state, pre-populates chat page
-- ~~Sample data preview~~ — Load top 10 dimension values from Fabric on demand with 24h caching
-- ~~Dynamic dimension extraction~~ — `DimensionExtractor` parses physical_schema.json with heuristics (min 2 table occurrences)
-- ~~Business definitions~~ — `description` field added to all 20 metrics in `metric_registry.json`; shown in Metrics Browser table and derived metric expanders
-- ~~Table relationship diagram~~ — New "Table Relationships" tab with interactive Plotly network graph; nodes colored by type (fact/dimension/mapping), edges colored by confidence; platform filter + high-confidence-only toggle; hover tooltips; expandable edge table
-
-**Value:** Solves discoverability problem, helps users learn what's queryable without guessing
-**Page location:** `ui/pages/Schema Explorer.py` (auto-discovered as "Schema Explorer" in Streamlit sidebar)
-**Phase 2 additions:**
-- `tools/dimension_extractor.py` — Automatic dimension discovery from physical schema
-- Fabric integration for sample data preview (requires connection)
-- Session state sharing with chat page for selected metrics
-
-### 7.3 Query History, Favorites & Sharing — **DONE** (Feb 17, 2026)
-- ~~Query history storage~~ — JSONL store at `history/queries.jsonl` (`tools/query_history_store.py`)
-- ~~History UI page~~ — `ui/pages/Query_History.py`: chronological list, search/filter by keyword/platform/date range, re-run button
-- ~~Favorites/bookmarks~~ — Star from history, add name/description/tags, stored in `history/favorites.json` (`tools/favorites_store.py`)
-- ~~Upvoting~~ — `⬆ Upvote` button increments vote count; favorites sorted by votes descending
-- ~~Shareable URLs~~ — "🔗 Share" shows `?q=<encoded question>` URL; QB auto-submits on page load with that param
-- Query versioning — deferred (low value vs. complexity)
-- Export query definitions — deferred
-- Team sharing — out of scope (requires auth)
-- Query collections — deferred
-
-**Value:** Makes queries reusable and shareable, builds institutional knowledge over time
-**Files:** `tools/query_history_store.py`, `tools/favorites_store.py`, `ui/pages/Query_History.py`; QB.py modified
+### 7.3 Query History, Favorites & Sharing — **DONE**
+- ~~History JSONL store~~, ~~history UI page~~, ~~favorites/bookmarks~~, ~~upvoting~~, ~~shareable URLs~~
 
 ### 7.4 Feedback & Continuous Improvement System — **DONE** (Feb 16, 2026)
-- ~~Feedback UI in Query Builder~~ → 👍👎 buttons after each SQL query, expandable correction form with 6 correction types
-- ~~Feedback storage~~ → JSONL append-only store at `feedback/corrections.jsonl` (thread-safe via `FeedbackStore`)
-- ~~Pattern analysis~~ → `tools/feedback_analyzer.py` detects: metric synonyms, dimension preferences, date filter gaps, platform aliases, few-shot candidates
-- ~~Markdown export~~ → Generates `FEEDBACK_LOG.md` (human-readable log) + `RECOMMENDATIONS.md` (actionable fixes)
-- ~~Admin dashboard~~ → `ui/pages/Feedback_Dashboard.py` with stats, top issues, recent feedback viewer, download buttons
-- ~~Auto-regeneration~~ → API triggers markdown regeneration every 5 feedback submissions
-- ~~Improvement loop~~ → Admin downloads MD files → uploads to Claude Code → Claude implements fixes → pushes to GitHub → users get updates via git pull
-- **Correction types:** metric_mismatch, dimension_wrong, platform_wrong, date_filter_wrong, filter_wrong, other
-- **Files created:** `feedback/corrections.jsonl`, `feedback/FEEDBACK_LOG.md`, `feedback/RECOMMENDATIONS.md`
-- **CLI:** `python tools/feedback_analyzer.py [--min-count N] [--max-recent N]`
+- ~~Feedback UI~~ → 👍👎 buttons + correction form (6 types)
+- ~~JSONL store + thread-safe writes~~
+- ~~Pattern analysis CLI~~, ~~markdown export~~, ~~admin dashboard~~, ~~auto-regeneration every 5 submissions~~
 
-**Value:** Zero-friction feedback mechanism, automated pattern detection, direct feedback-to-fix loop with AI, continuous improvement tracked in Git
+### 7.5 Visualization System — **DONE** (Feb 16-17, 2026)
+- ~~8 chart types in `ui/viz_utils.py`~~ (line, multi-line, bar, grouped bar, horizontal bar, horizontal bar multi, area, number)
+- ~~Auto-detection from DataFrame shape~~ via `detect_visualization_opportunity()`
+- ~~QB integration~~ with show/hide toggle and metric multiselect
+- ~~MDR integration~~ for summary matrix and campaign details charts
+- ~~Visual Reports page~~ (`ui/pages/Visual_Reports.py`) with templates, save/load configs, PNG/HTML export
+- ~~Totals row~~ above results with rate-correct aggregation
 
 ---
 
-## Out of Scope (Documented for Future)
-- [ ] Result visualization / charting
-- [ ] Multi-tenant support
-- [ ] Query optimization suggestions
-- [ ] Window function support (RANK, LAG/LEAD)
-- [ ] Natural language result summarization (implement after core UX features)
+## Priority 8: Next Up
+
+### 8.1 Automatic LLM Failover — **PENDING**
+Groq → Ollama (or vice versa) automatic fallback when primary provider fails or times out.
+- [ ] `build_llm_adapter()` tries primary, catches `LLMBackendError`, falls back to secondary
+- [ ] Sidebar shows which provider is active (primary vs. fallback)
+- [ ] Config: `NL_SQL_LLM_FALLBACK` env var
+- [ ] Test: mock primary failure → verify fallback produces valid spec
+
+**Why now:** Infrastructure is ready (both backends implement `LLMBackend` protocol). Groq has rate limits that hit in practice.
+
+### 8.2 Natural Language Result Summarization — **PENDING**
+After query runs and results are displayed, use the LLM to generate a 2-3 sentence plain-English summary of what the data shows.
+- [ ] POST `/summarize` endpoint: accepts `{sql, results_json, question}` → returns `{summary}`
+- [ ] In QB: show summary above the data table (collapsible, cached per query)
+- [ ] Prompt: "Given this question and results, summarize the key insight in 2-3 sentences."
+- [ ] Use Groq for low latency; stream the response if possible
+
+**Why now:** Core UX features are complete. This makes the tool genuinely self-service — users get an insight, not just a table.
+
+### 8.3 Export to Excel / CSV — **PENDING**
+One-click download of query results from QB and MDR.
+- [ ] `st.download_button()` below results table — CSV via `df.to_csv(index=False)`
+- [ ] Optional Excel (`.xlsx`) via `openpyxl` with pre-formatted number columns
+- [ ] MDR: download the full summary matrix + all date-range detail tables as separate sheets
+- [ ] Filename: `{sanitized_question}_{date}.csv`
+
+**Why now:** Trivial to implement, frequently requested, no backend changes needed.
+
+### 8.4 Auto-Suggested Follow-Up Questions — **PENDING**
+After each query, show 2-3 clickable follow-up question suggestions that build on the result.
+- [ ] LLM generates follow-ups given current spec + question (e.g., "Show by campaign", "Compare to last month", "Break out by platform")
+- [ ] Render as pills/buttons below the result; clicking pre-fills chat input
+- [ ] Cache suggestions per `(question, spec)` hash to avoid redundant LLM calls
+- [ ] Can reuse existing `/providers` infrastructure; fire async after result renders
+
+**Why now:** Directly builds on conversational context system. Lowers the "what can I ask?" barrier for new users.
+
+---
+
+## Deferred / Out of Scope
+
+- ~~Result visualization / charting~~ — **DONE** (Priority 7.5)
+- [ ] Window function support (RANK, LAG/LEAD) — useful for ranking campaigns, period-over-period trends; medium complexity SQL generation change
+- [ ] Query optimization suggestions — low priority; queries are already deterministic and fast
+- [ ] Multi-tenant support — requires auth system, out of scope
+- [ ] Team sharing — requires auth, out of scope
+- [ ] Scheduled reports / email export — useful long-term; needs background scheduler (APScheduler or Fabric pipelines)
+- [ ] Anomaly detection / alerting — "alert me when CPC > $X"; needs persistent state + notification system
+- [ ] Dashboard builder — save multiple charts as a named dashboard; builds on viz system; medium effort
+- [ ] Query collections — group related queries into folders; low priority
+- [ ] Query versioning — deferred (low value vs. complexity)
+- [ ] Export query definitions (spec JSON) — deferred
+
+---
+
+## Potential New Features
+
+Ideas that fit naturally with what's been built. Roughly ordered by value/effort ratio.
+
+### High Value, Low Effort
+1. **Dimension value autocomplete** — When typing a question, suggest valid dimension values (campaign names, account names) pulled from cached Fabric samples. Already have 24h-cached sample data in Schema Explorer.
+2. **LLM token usage dashboard** — `ChatResult` already tracks `input_tokens`/`output_tokens`. Add a sidebar stat or Feedback Dashboard tab showing cumulative token spend and estimated cost per provider.
+3. **"Explain this SQL" button** — Send generated SQL back to the LLM: "Explain what this query does in plain English, step by step." Low latency, high educational value for non-SQL users.
+4. **Pinned metrics in Schema Explorer** — Let users star metrics they use often; show starred metrics at the top of the Metrics Browser and in the QB metric picker.
+
+### High Value, Medium Effort
+5. **Metric trending / sparklines in Schema Explorer** — Show a 30-day sparkline next to each metric in the Metrics Browser (requires Fabric connection + one SQL per metric). Makes the catalog feel live.
+6. **Period-over-period comparison in QB chat** — Detect "vs last week/month" in NL and automatically generate a comparison query + delta column. Currently requires Multi-Date Reporting page; bringing it to chat would reduce friction.
+7. **Saved filters / filter presets** — Let users save a named filter set (platform=Google, account=Foo) and apply it with one click. Useful for team members who always query the same account.
+8. **Query result caching** — Store executed results alongside `history/queries.jsonl`. Re-running a favorite skips Fabric if results are < 1h old. Reduces Fabric load and speeds up repeated exploration.
+
+### Medium Value, Medium Effort
+9. **Metric benchmarking** — Automatically annotate results with "vs. 30-day average" badges. E.g., "CTR 2.3% (↑ vs 1.8% avg)". Uses a second background SQL query against the same metric over a longer window.
+10. **Natural language anomaly flagging** — After results render, highlight rows where a metric is > 2 std deviations from the campaign's historical mean. "⚠ Campaign X has unusually high CPC today."
+11. **Window function support (RANK, LAG/LEAD)** — Extend `spec_executor` to support `grain: "rank_by"` or `grain: "trend"`. Enables "top 10 campaigns by spend" and "week-over-week change" natively in SQL.
+12. **Visual Reports templates expansion** — Add pre-built report templates: "Weekly Executive Summary", "Campaign Health Check", "Platform Head-to-Head". Each template pre-fills metrics, date range, and chart type.
+
+### Lower Priority / Longer Horizon
+13. **Scheduled reports** — Run a saved query on a schedule (daily/weekly) and email/Slack the result. Needs APScheduler or Fabric pipeline integration.
+14. **Metric alert rules** — "Notify me when daily spend exceeds $X". Stores rules in JSON; background worker polls and sends alerts.
+15. **Collaborative annotations** — Add notes/comments to query history entries that are visible to the whole team. Requires shared storage (not local JSONL).
+16. **Dashboard builder** — Pin charts from QB/MDR/Visual Reports into a named dashboard. Save layout as JSON; render on a new "Dashboards" page.

@@ -45,6 +45,7 @@ class AppConfig:
     # LLM settings
     llm_enabled: bool = True
     llm_provider: str = "ollama"  # "ollama" or "groq"
+    llm_fallback: str = ""  # fallback provider when primary fails; "" = disabled
     ollama_url: str = "http://192.168.12.51:11434"
     ollama_model: str = "qwen3:14b"
     ollama_timeout: int = 300
@@ -86,6 +87,9 @@ class AppConfig:
         )
         kwargs["llm_provider"] = os.getenv(
             "NL_SQL_LLM_PROVIDER", "ollama"
+        ).lower()
+        kwargs["llm_fallback"] = os.getenv(
+            "NL_SQL_LLM_FALLBACK", ""
         ).lower()
         kwargs["ollama_url"] = os.getenv(
             "OLLAMA_URL", "http://192.168.12.51:11434"
