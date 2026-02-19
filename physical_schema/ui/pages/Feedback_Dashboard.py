@@ -23,7 +23,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from tools.feedback_store import CorrectionRecord, FeedbackStore  # noqa: E402
+from tools.feedback_store import (  # noqa: E402
+    CorrectionRecord,
+    FeedbackLockedError,
+    FeedbackStore,
+    LOCK_TIMEOUT_SECS,
+    get_feedback_path,
+)
 from tools.feedback_analyzer import (  # noqa: E402
     find_metric_gaps,
     find_dimension_patterns,
@@ -37,9 +43,9 @@ from tools.feedback_analyzer import (  # noqa: E402
 # Configuration
 # ---------------------------------------------------------------------------
 
-FEEDBACK_FILE = _PROJECT_ROOT / "feedback" / "corrections.jsonl"
-RECOMMENDATIONS_FILE = _PROJECT_ROOT / "feedback" / "RECOMMENDATIONS.md"
-FEEDBACK_LOG_FILE = _PROJECT_ROOT / "feedback" / "FEEDBACK_LOG.md"
+FEEDBACK_FILE = get_feedback_path()
+RECOMMENDATIONS_FILE = FEEDBACK_FILE.parent / "RECOMMENDATIONS.md"
+FEEDBACK_LOG_FILE = FEEDBACK_FILE.parent / "FEEDBACK_LOG.md"
 
 # Stub spec used for manually-entered feedback (no real query ran)
 _STUB_SPEC: dict = {
@@ -150,9 +156,16 @@ def main():
                     correction_type=_CORRECTION_TYPE_MAP[mf_type_display],
                     notes=mf_notes.strip(),
                 )
-                FeedbackStore(FEEDBACK_FILE).append(record)
-                st.success("✅ Feedback recorded!")
-                st.rerun()
+                try:
+                    FeedbackStore(FEEDBACK_FILE).append(record)
+                    st.success("✅ Feedback recorded!")
+                    st.rerun()
+                except FeedbackLockedError as exc:
+                    remaining = max(0, LOCK_TIMEOUT_SECS - exc.age_secs)
+                    st.warning(
+                        f"⚠️ Another user is currently submitting feedback. "
+                        f"Please wait about {remaining} seconds and try again."
+                    )
 
     # Load feedback
     records = load_feedback()

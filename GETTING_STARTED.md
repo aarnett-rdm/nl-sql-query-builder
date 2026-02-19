@@ -5,6 +5,7 @@ Welcome! This guide will help you get the Query Builder app running on your comp
 ## What You'll Need
 
 - Windows computer with internet access
+- Google Drive for Desktop installed (for shared feedback — your admin will confirm)
 - About 10 minutes for first-time setup
 - That's it! We'll walk you through everything else.
 
@@ -21,8 +22,6 @@ Git is a tool that helps you download and update the app easily.
 3. Run the installer with all default settings (just keep clicking "Next")
 4. **You can close the installer when done** - you won't need to open Git directly
 
-> **Screenshot placeholder:** Git download page with download button highlighted
-
 ### Step 2: Install Python
 
 Python is the programming language the app runs on.
@@ -32,8 +31,6 @@ Python is the programming language the app runs on.
 3. **IMPORTANT:** When the installer opens, check the box that says "Add Python to PATH"
 4. Click "Install Now"
 5. Wait for installation to complete
-
-> **Screenshot placeholder:** Python installer with "Add Python to PATH" checkbox highlighted
 
 ### Step 3: Download the App
 
@@ -47,8 +44,6 @@ Python is the programming language the app runs on.
    git clone https://github.com/aarnett-rdm/nl-sql-query-builder.git
    ```
 4. Wait for it to download (takes about 30 seconds)
-
-> **Screenshot placeholder:** Command Prompt showing successful git clone
 
 ### Step 4: Install Dependencies
 
@@ -65,9 +60,26 @@ Still in Command Prompt:
    ```
 3. Wait for everything to install - you'll see lots of text scroll by, this is normal!
 
-> **Screenshot placeholder:** Command Prompt showing pip install in progress
+### Step 5: Create Your Configuration File
 
-### Step 5: Create Desktop Shortcut (Optional but Recommended)
+The app needs a small configuration file to know where to save shared feedback.
+
+1. In your `nl-sql-query-builder\physical_schema` folder, find the file called `.env.example`
+2. Make a copy of it and rename the copy to `.env` (no `.example` at the end)
+3. Open `.env` in Notepad
+4. Find the line that says:
+   ```
+   NL_SQL_FEEDBACK_PATH=
+   ```
+5. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
+   ```
+   NL_SQL_FEEDBACK_PATH=G:/Shared drives/Tickets/Sports Team/Query Tool Feedback/corrections.jsonl
+   ```
+6. Save and close the file
+
+> **Note:** If your admin hasn't set up a shared folder yet, you can leave this blank — your feedback will save locally on your own computer instead.
+
+### Step 6: Create Desktop Shortcut (Optional but Recommended)
 
 This makes it super easy to start the app later:
 
@@ -109,7 +121,24 @@ This makes it super easy to start the app later:
    - "What were clicks and conversions by campaign last month?"
    - "Compare cost per click for Google Ads vs Microsoft Ads this year"
 
-> **Screenshot placeholder:** Query Builder interface with numbered callouts
+**After you get results, you can:**
+- Click **"✨ Summarize results"** to get an AI-written plain-English summary
+- Use **"⬇ CSV"** or **"⬇ Excel"** to download the data
+- Click any of the **suggested follow-up questions** to keep digging
+- Expand **"View SQL"** to see exactly what query ran
+
+### The Other Pages (sidebar)
+
+The app has several pages — use the sidebar to navigate between them:
+
+| Page | What it's for |
+|------|--------------|
+| **Query Builder** | Ask questions in plain English, get data back |
+| **Multi Date Reporting** | Compare the same metrics across multiple date ranges side by side |
+| **Query History** | Browse, re-run, and favorite your past queries; share queries with teammates |
+| **Schema Explorer** | Browse available metrics, dimensions, and how tables connect |
+| **Feedback Dashboard** | Log issues, see patterns in what the app gets wrong |
+| **Visual Reports** | Pre-built visual dashboards |
 
 ### When You're Done
 
@@ -160,6 +189,13 @@ Or just close the Command Prompt window directly - the app will stop automatical
    pip install -r physical_schema/ui/requirements.txt
    ```
 
+### Feedback isn't showing up for the team
+
+**Fix:** The shared feedback path isn't configured.
+1. Open your `.env` file in Notepad (it's in `nl-sql-query-builder\physical_schema\`)
+2. Check that `NL_SQL_FEEDBACK_PATH=` has the correct path (ask your admin if unsure)
+3. Restart the app
+
 ### Getting Updates
 
 **The `start_app.bat` script automatically checks for updates every time you start the app!**
@@ -194,19 +230,14 @@ Contact Andrew Arnett via:
 
 ✅ **Be specific in your questions** - "Show revenue and clicks for Google Ads last week" works better than "show me data"
 
-✅ **Review the generated SQL** - it's in a collapsible section. This helps you learn what the app is doing!
+✅ **Use follow-up questions** - after getting results, the app suggests related questions you can click to keep exploring
 
-✅ **Use the feedback button** - if the app gets something wrong, tell it! This helps improve the system.
+✅ **Export your results** - use the CSV or Excel buttons below any results table to take data elsewhere
+
+✅ **Review the generated SQL** - it's in a collapsible section below results. This helps you verify the app interpreted your question correctly
+
+✅ **Use the feedback button** - if the app gets something wrong, click the thumbs down and describe the issue. This helps improve the system for everyone
+
+✅ **Check Query History** - if you ran a useful query before, find it in Query History and re-run or share it instead of retyping
 
 ✅ **Start simple** - try basic questions first, then work up to complex multi-metric comparisons
-
----
-
-## What's Next?
-
-Once you're comfortable with the basics, check out:
-- **Multi Date Reporting** page (in the sidebar) - compare metrics across multiple date ranges
-- **GIT_CHEAT_SHEET.md** - if you want to learn more about updating the app manually
-- **Advanced filters** - you can filter by campaign name, account, platform, and more
-
-**Happy querying!** 🎉

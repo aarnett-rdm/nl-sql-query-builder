@@ -39,7 +39,13 @@ from tools.exceptions import (
     OllamaError,
     SpecValidationError,
 )
-from tools.feedback_store import CorrectionRecord, FeedbackStore, VALID_TYPES
+from tools.feedback_store import (
+    CorrectionRecord,
+    FeedbackLockedError,
+    FeedbackStore,
+    VALID_TYPES,
+    get_feedback_path,
+)
 from tools.feedback_analyzer import generate_recommendations, generate_feedback_log
 from tools.llm_adapter import LLMAdapter, FailoverBackend, build_llm_adapter
 
@@ -463,9 +469,8 @@ def _startup() -> None:
     else:
         _log_json("startup_llm_disabled", request_id="startup")
 
-    # Feedback store
-    project_root = Path(__file__).resolve().parents[1]
-    _feedback_store = FeedbackStore(project_root / "feedback" / "corrections.jsonl")
+    # Feedback store — path from NL_SQL_FEEDBACK_PATH env var or default local path
+    _feedback_store = FeedbackStore(get_feedback_path())
 
     _log_json(
         "startup_ok",
@@ -897,7 +902,10 @@ def submit_feedback(req: FeedbackRequest):
         correction_type=req.correction_type,
         notes=req.notes,
     )
-    _feedback_store.append(record)
+    try:
+        _feedback_store.append(record)
+    except FeedbackLockedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     _log_json(
         "feedback_recorded",
         request_id=req.request_id,

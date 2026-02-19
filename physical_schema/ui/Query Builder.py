@@ -463,6 +463,12 @@ def render_feedback_ui(msg: dict, idx: int):
                             st.success(f"✅ Feedback submitted! ID: {feedback_resp.get('feedback_id', '')[:8]}")
                             st.caption("Your feedback will help improve the system. Thank you!")
                             st.rerun()
+                        except requests.HTTPError as e:
+                            if e.response is not None and e.response.status_code == 409:
+                                detail = e.response.json().get("detail", "Another user is submitting feedback.")
+                                st.warning(f"⚠️ {detail}")
+                            else:
+                                st.error(f"Failed to submit feedback: {e}")
                         except Exception as e:
                             st.error(f"Failed to submit feedback: {e}")
 
