@@ -22,9 +22,9 @@ from tools.fabric_conn import FabricConnection
 # ---------------------------------------------------------------------------
 
 # Column names (lowercased) that represent dollar amounts
-_CURRENCY_COLS = {"cost", "profit", "revenue", "spend", "cpc", "roi", "exchange revenue"}
+_CURRENCY_COLS = {"cost", "profit", "revenue", "spend", "cpc", "exchange revenue"}
 # Column names (lowercased) that represent rates / percentages
-_RATE_COLS = {"ctr", "conversion rate", "click through rate"}
+_RATE_COLS = {"ctr", "conversion rate", "click through rate", "roi"}
 
 # Rate metrics that must be recalculated from base sums rather than summed directly.
 # Maps rate keyword → (numerator keyword, denominator keyword) — all lowercased.
@@ -96,9 +96,15 @@ def build_totals_row(df: pd.DataFrame) -> pd.DataFrame | None:
                  "revenue per click", "revenue per conversion"]
 
     # Fill categorical columns with a label
+    # Show "Total" only in the first dimension column, blank in others for cleaner display
+    first_dim_col = None
     for col in df.columns:
         if not pd.api.types.is_numeric_dtype(df[col]):
-            totals[col] = "Total"
+            if first_dim_col is None:
+                first_dim_col = col
+                totals[col] = "Total"
+            else:
+                totals[col] = ""  # Blank for other dimension columns
 
     # For each numeric column decide: sum, recalculate from base metrics, or mean
     recalculated = set()

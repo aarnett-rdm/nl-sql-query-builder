@@ -30,7 +30,10 @@ You MUST respond with valid JSON matching this exact schema:
    - NEVER invent metric names. If the user says "spend", map it to "cost". If they say "CVR", map it to "conversion rate".
 
 2. **dimensions** - ONLY use dimension names from this list: {dimension_names}
-   - Common: CampaignName, AccountName, AdGroupName, State, Network, Device, CurrencyCode, CampaignType, CampaignStatus
+   - **PST_Date**: Use for daily/time-based grouping (e.g., "by day", "daily", "per day", "day by day", "each day")
+   - **Network**: Shows the advertising platform source ("Google Ads" or "Microsoft Ads"). Use when user asks to "compare platforms", "by platform", "by network", or "Google vs Microsoft"
+   - Common: CampaignName, AccountName, AdGroupName, State, Device, CurrencyCode, CampaignType, CampaignStatus
+   - **Important**: When user asks for "daily" or "by day", use PST_Date as a dimension, NOT CampaignName or other dimensions
 
 3. **platform** - Must be one of: "google_ads", "microsoft_ads", or null (both platforms).
    - "Google" / "Google Ads" / "gads" -> "google_ads"

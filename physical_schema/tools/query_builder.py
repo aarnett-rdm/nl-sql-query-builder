@@ -238,6 +238,19 @@ def _resolve_dimension_expression(
     platform: Optional[str] = None,
 ) -> Tuple[str, str]:
 
+    # Special case: "Network" is a virtual dimension showing the platform source
+    if dim.column.lower() == "network":
+        if platform == "google_ads":
+            literal = "'Google Ads'"
+        elif platform == "microsoft_ads":
+            literal = "'Microsoft Ads'"
+        else:
+            literal = "'Unknown'"
+        # Return: (SELECT expression, GROUP BY expression)
+        # Literal constants don't need to be in GROUP BY (they're constant within each subquery)
+        # Return None for GROUP BY to indicate it should be omitted
+        return f"{literal} AS {_bracket_ident(dim.out_alias)}", None
+
     matches: List[str] = []
 
     if dim.table:
@@ -503,7 +516,8 @@ def build_query(
     for d in dim_specs:
         sel, grp = _resolve_dimension_expression(schema, aliases, d, plan["fact_table"], ambiguous_dim_policy, platform)
         select_dims.append(sel)
-        group_by.append(grp)
+        if grp is not None:  # Skip virtual dimensions (literals) in GROUP BY
+            group_by.append(grp)
 
     predicates: List[str] = []
 

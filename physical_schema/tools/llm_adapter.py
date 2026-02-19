@@ -78,6 +78,7 @@ class SchemaContext:
     @property
     def dimension_names(self) -> List[str]:
         return [
+            "PST_Date",  # Date dimension for daily/time-based grouping
             "CampaignName", "AccountName", "AdGroupName", "State",
             "Network", "Device", "CurrencyCode", "CampaignType", "CampaignStatus",
         ]

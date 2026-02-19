@@ -900,7 +900,7 @@
       "description": "Return on investment as a percentage of ad cost: (profit / cost) x 100",
       "metric_class": "rate",
       "default_aggregation": "derived",
-      "derived_formula": "(profit / cost) * 100",
+      "derived_formula": "profit / cost",
       "base_metrics": [
         "profit",
         "cost"

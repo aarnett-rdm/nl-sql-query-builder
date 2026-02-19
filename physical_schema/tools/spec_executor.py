@@ -225,7 +225,14 @@ def _reaggregate_union(union_sql: str, spec: Dict[str, Any]) -> str:
     the shape you would have had if a single fact table existed.
 
     Assumes metric columns are aliased as [<metric>] and dimension columns as [<dimension>].
+
+    Derived metrics (rates, percentages) are recalculated from their base metrics
+    instead of summed to avoid incorrect aggregation (e.g., ROI must be recalculated
+    as total profit / total cost, not SUM(individual ROI values)).
     """
+    from pathlib import Path
+    import json
+
     dims = spec.get("dimensions") or []
     mets = spec.get("metrics") or []
 
@@ -233,20 +240,64 @@ def _reaggregate_union(union_sql: str, spec: Dict[str, Any]) -> str:
     if not mets:
         return union_sql
 
+    # Load metric registry to identify derived metrics
+    registry_path = Path(spec.get("paths", {}).get("metric_registry", "current/metric_registry.json"))
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        metrics_defs = registry.get("metrics", {})
+    except Exception:
+        metrics_defs = {}
+
+    # Helper to check if metric is derived
+    def is_derived(metric_name: str) -> bool:
+        m_def = metrics_defs.get(metric_name.lower().strip(), {})
+        return m_def.get("default_aggregation") == "derived"
+
+    # Helper to get derived formula
+    def get_derived_formula(metric_name: str) -> str | None:
+        m_def = metrics_defs.get(metric_name.lower().strip(), {})
+        return m_def.get("derived_formula")
+
+    # Build metric select expressions
+    metric_exprs = []
+    for m in mets:
+        if is_derived(m):
+            formula = get_derived_formula(m)
+            if formula:
+                # Replace metric names in formula with SUM([metric])
+                # e.g., "profit / cost" -> "(SUM([profit]) / SUM([cost]))"
+                # Note: Formulas should NOT include * 100 - that's added during display formatting
+                sql_formula = formula
+                for base_m in ["profit", "cost", "clicks", "impressions", "conversions", "revenue"]:
+                    if base_m in sql_formula:
+                        sql_formula = sql_formula.replace(base_m, f"SUM([{base_m}])")
+                # Wrap divisions with NULLIF to prevent divide-by-zero
+                sql_formula = sql_formula.replace(")", ") ")  # Add space for regex
+                import re
+                sql_formula = re.sub(r'SUM\(\[([^\]]+)\]\)\s*/\s*SUM\(\[([^\]]+)\]\)',
+                                    r'(CAST(SUM([\1]) AS FLOAT) / NULLIF(SUM([\2]), 0))',
+                                    sql_formula)
+                metric_exprs.append(f"({sql_formula}) AS [{m}]")
+            else:
+                # Fallback: sum it (shouldn't happen if registry is complete)
+                metric_exprs.append(f"SUM([{m}]) AS [{m}]")
+        else:
+            # Base metric: sum it
+            metric_exprs.append(f"SUM([{m}]) AS [{m}]")
+
     if not dims:
-        # Total-only: SUM each metric across union
-        select_exprs = [f"SUM([{m}]) AS [{m}]" for m in mets]
+        # Total-only: aggregate across union
         return f"""
         SELECT
-          {", ".join(select_exprs)}
+          {", ".join(metric_exprs)}
         FROM (
           {union_sql}
         ) u
         """
 
-    # With dimensions: group by dims, SUM metrics
+    # With dimensions: group by dims, aggregate metrics
     dim_select = ", ".join([f"[{d}]" for d in dims])
-    metric_select = ", ".join([f"SUM([{m}]) AS [{m}]" for m in mets])
+    metric_select = ", ".join(metric_exprs)
     group_by = ", ".join([f"[{d}]" for d in dims])
 
     return f"""
