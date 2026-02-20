@@ -45,6 +45,10 @@ METRIC_REGISTRY = CONFIG_DIR / "metric_registry.json"
 PLATFORMS = ["google_ads", "microsoft_ads"]
 PLATFORM_LABELS = {"google_ads": "Google Ads", "microsoft_ads": "Microsoft Ads"}
 
+# Campaign status options
+CAMPAIGN_STATUSES = ["All Campaigns", "Enabled", "Paused", "Removed"]
+DEFAULT_CAMPAIGN_STATUS = "Enabled"
+
 # Available dimensions for grouping
 DIMENSIONS = [
     "None (Aggregate)",
@@ -139,6 +143,35 @@ def load_account_names(platform: str) -> list[str]:
         return []
 
 
+def load_category_names() -> list[str]:
+    """
+    Load distinct category names from the Category table.
+
+    Returns:
+        Sorted list of category names
+    """
+    # Check if Fabric is connected
+    if not st.session_state.get("fabric_connected", False):
+        return []
+
+    table = "GoTicketsCoreEntity.Category"
+    formatted_table = tsql_qualified_table(table)
+    # Add TOP manually to prevent FabricConnection from inserting it in the wrong position
+    # (T-SQL requires: SELECT DISTINCT TOP n, not SELECT TOP n DISTINCT)
+    sql = f"SELECT DISTINCT TOP 10000 CategoryName FROM {formatted_table} ORDER BY CategoryName"
+
+    try:
+        fc: FabricConnection = st.session_state.fabric_conn
+        df = fc.execute(sql, row_limit=None)
+        category_list = df["CategoryName"].tolist()
+        if len(category_list) == 0:
+            st.warning(f"No categories found. Query: {sql}")
+        return category_list
+    except Exception as e:
+        st.error(f"Could not load category names: {e}\nQuery: {sql}")
+        return []
+
+
 def build_chart_spec(
     platform: str,
     metrics: list[str],
@@ -147,6 +180,8 @@ def build_chart_spec(
     date_to: date,
     account_filter: str = "",
     campaign_filter: str = "",
+    category_filter: str = "",
+    status_filter: str = "",
 ) -> dict:
     """Build a spec for the custom chart query."""
     where_filters = []
@@ -157,12 +192,16 @@ def build_chart_spec(
             "value": account_filter
         })
 
-    if campaign_filter:
+    if category_filter:
         where_filters.append({
-            "field": "CampaignName",
-            "op": "contains",
-            "value": campaign_filter,
-            "case_insensitive": True
+            "field": "CategoryName",
+            "value": category_filter
+        })
+
+    if status_filter and status_filter != "All Campaigns":
+        where_filters.append({
+            "field": "CampaignStatus",
+            "value": status_filter
         })
 
     spec = {
@@ -178,6 +217,16 @@ def build_chart_spec(
             "where": where_filters
         },
     }
+
+    # Add campaign filter if specified (supports comma-separated OR logic)
+    if campaign_filter:
+        # Split by comma and strip whitespace
+        campaign_terms = [term.strip() for term in campaign_filter.split(",") if term.strip()]
+        if campaign_terms:
+            spec["filters"]["campaign"] = {
+                "terms": campaign_terms,
+                "mode": "any"  # OR logic - campaign contains any of the terms
+            }
 
     # Special handling for date dimension
     if dimension == "date":
@@ -409,6 +458,10 @@ def main():
     available_accounts = load_account_names(st.session_state.selected_platform)
     account_options = ["All Accounts"] + available_accounts
 
+    # Load category names
+    available_categories = load_category_names()
+    category_options = ["All Categories"] + available_categories
+
     # Platform selector outside form so it updates accounts immediately
     st.subheader("Platform Selection")
     platform = st.selectbox(
@@ -486,6 +539,25 @@ def main():
             if account_filter == "All Accounts":
                 account_filter = ""
 
+            category_filter = st.selectbox(
+                "Category",
+                options=category_options,
+                index=0,
+                help="Select category (or 'All Categories' for all)"
+            )
+            # Convert "All Categories" to empty string for the filter logic
+            if category_filter == "All Categories":
+                category_filter = ""
+
+            # Campaign status filter (default to Enabled)
+            default_status_index = CAMPAIGN_STATUSES.index(DEFAULT_CAMPAIGN_STATUS)
+            status_filter = st.selectbox(
+                "Campaign Status",
+                options=CAMPAIGN_STATUSES,
+                index=default_status_index,
+                help="Filter by campaign status (default: Enabled)",
+            )
+
             campaign_filter = st.text_input(
                 "Campaign Contains",
                 placeholder="e.g., Brand, Performance",
@@ -526,6 +598,8 @@ def main():
                     "date_to": date_to.isoformat(),
                     "account_filter": account_filter,
                     "campaign_filter": campaign_filter,
+                    "category_filter": category_filter,
+                    "status_filter": status_filter,
                 }
                 save_chart_config(save_name, config)
 
@@ -552,6 +626,8 @@ def main():
                     date_to=date_to,
                     account_filter=account_filter.strip(),
                     campaign_filter=campaign_filter.strip(),
+                    category_filter=category_filter.strip(),
+                    status_filter=status_filter,
                 )
 
                 # Execute query

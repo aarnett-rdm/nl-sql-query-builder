@@ -40,6 +40,10 @@ METRIC_REGISTRY = CONFIG_DIR / "metric_registry.json"
 PLATFORMS = ["google_ads", "microsoft_ads"]
 PLATFORM_LABELS = {"google_ads": "Google", "microsoft_ads": "Microsoft"}
 
+# Campaign status options
+CAMPAIGN_STATUSES = ["All Campaigns", "Enabled", "Paused", "Removed"]
+DEFAULT_CAMPAIGN_STATUS = "Enabled"
+
 # ---------------------------------------------------------------------------
 # Session State
 # ---------------------------------------------------------------------------
@@ -112,6 +116,35 @@ def load_account_names(platform: str) -> list[str]:
         return []
 
 
+def load_category_names() -> list[str]:
+    """
+    Load distinct category names from the Category table.
+
+    Returns:
+        Sorted list of category names
+    """
+    # Check if Fabric is connected
+    if not st.session_state.get("fabric_connected", False):
+        return []
+
+    table = "GoTicketsCoreEntity.Category"
+    formatted_table = tsql_qualified_table(table)
+    # Add TOP manually to prevent FabricConnection from inserting it in the wrong position
+    # (T-SQL requires: SELECT DISTINCT TOP n, not SELECT TOP n DISTINCT)
+    sql = f"SELECT DISTINCT TOP 10000 CategoryName FROM {formatted_table} ORDER BY CategoryName"
+
+    try:
+        fc: FabricConnection = st.session_state.fabric_conn
+        df = fc.execute(sql, row_limit=None)
+        category_list = df["CategoryName"].tolist()
+        if len(category_list) == 0:
+            st.warning(f"No categories found. Query: {sql}")
+        return category_list
+    except Exception as e:
+        st.error(f"Could not load category names: {e}\nQuery: {sql}")
+        return []
+
+
 def build_spec_for_range(
     platform: str,
     accounts: list[str],
@@ -119,6 +152,8 @@ def build_spec_for_range(
     date_from: date,
     date_to: date,
     campaign_contains: str | None = None,
+    category: str | None = None,
+    campaign_status: str | None = None,
 ) -> dict:
     """
     Build a spec dict for a single date range.
@@ -129,7 +164,9 @@ def build_spec_for_range(
         metrics: List of metric names to aggregate
         date_from: Start date (inclusive)
         date_to: End date (inclusive)
-        campaign_contains: Optional campaign name filter (LIKE %value%)
+        campaign_contains: Optional campaign name filter (comma-separated for OR logic)
+        category: Optional category name filter
+        campaign_status: Optional campaign status filter (Enabled, Paused, Removed)
 
     Returns:
         Spec dict ready for execute_spec()
@@ -144,13 +181,18 @@ def build_spec_for_range(
             "value": accounts[0]  # Single account
         })
 
-    # Add campaign filter if specified
-    if campaign_contains:
+    # Add category filter if specified
+    if category:
         where_filters.append({
-            "field": "CampaignName",
-            "op": "contains",
-            "value": campaign_contains,
-            "case_insensitive": True
+            "field": "CategoryName",
+            "value": category
+        })
+
+    # Add campaign status filter if specified
+    if campaign_status and campaign_status != "All Campaigns":
+        where_filters.append({
+            "field": "CampaignStatus",
+            "value": campaign_status
         })
 
     spec = {
@@ -167,6 +209,16 @@ def build_spec_for_range(
         },
     }
 
+    # Add campaign filter if specified (supports comma-separated OR logic)
+    if campaign_contains:
+        # Split by comma and strip whitespace
+        campaign_terms = [term.strip() for term in campaign_contains.split(",") if term.strip()]
+        if campaign_terms:
+            spec["filters"]["campaign"] = {
+                "terms": campaign_terms,
+                "mode": "any"  # OR logic - campaign contains any of the terms
+            }
+
     return spec
 
 
@@ -176,6 +228,8 @@ def execute_comparison(
     metrics: list[str],
     date_ranges: list[tuple[str, date, date]],
     campaign_contains: str | None = None,
+    category: str | None = None,
+    campaign_status: str | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Execute queries for all date ranges and return a summary matrix.
@@ -186,6 +240,8 @@ def execute_comparison(
         metrics: List of metric names
         date_ranges: List of (label, start_date, end_date) tuples
         campaign_contains: Optional campaign name filter
+        category: Optional category name filter
+        campaign_status: Optional campaign status filter
 
     Returns:
         Tuple of (DataFrame with date range labels as index and metrics as columns, list of SQL queries)
@@ -196,7 +252,7 @@ def execute_comparison(
 
     for label, date_from, date_to in date_ranges:
         # Build spec for this date range
-        spec = build_spec_for_range(platform, accounts, metrics, date_from, date_to, campaign_contains)
+        spec = build_spec_for_range(platform, accounts, metrics, date_from, date_to, campaign_contains, category, campaign_status)
 
         # Normalize spec (adds default paths)
         spec = normalize_spec(spec)
@@ -277,6 +333,8 @@ def execute_campaign_details(
     metrics: list[str],
     date_ranges: list[tuple[str, date, date]],
     campaign_contains: str | None = None,
+    category: str | None = None,
+    campaign_status: str | None = None,
 ) -> pd.DataFrame:
     """
     Execute queries for all date ranges with campaign-level detail.
@@ -287,6 +345,8 @@ def execute_campaign_details(
         metrics: List of metric names
         date_ranges: List of (label, start_date, end_date) tuples
         campaign_contains: Optional campaign name filter
+        category: Optional category name filter
+        campaign_status: Optional campaign status filter
 
     Returns:
         DataFrame with columns: Performer Name, Date Range, and all metrics
@@ -295,7 +355,7 @@ def execute_campaign_details(
 
     for label, date_from, date_to in date_ranges:
         # Build spec with CampaignName dimension
-        spec = build_spec_for_range(platform, accounts, metrics, date_from, date_to, campaign_contains)
+        spec = build_spec_for_range(platform, accounts, metrics, date_from, date_to, campaign_contains, category, campaign_status)
         spec["dimensions"] = ["CampaignName"]  # Add campaign dimension
 
         # Normalize spec (adds default paths)
@@ -551,6 +611,10 @@ def main():
     available_accounts = load_account_names(st.session_state.mdr_selected_platform)
     account_options = ["All Accounts"] + available_accounts
 
+    # Load category names
+    available_categories = load_category_names()
+    category_options = ["All Categories"] + available_categories
+
     # Metric selection and reordering (outside form)
     with st.expander("⚙️ Select & Reorder Metrics", expanded=True):
         # Default to common metrics that exist in registry
@@ -644,6 +708,24 @@ def main():
                 # Convert to list format expected by the rest of the code
                 account_list = [accounts] if accounts and accounts != "All Accounts" else []
 
+                category = st.selectbox(
+                    "Category",
+                    options=category_options,
+                    index=0,
+                    help="Select category (or 'All Categories' for all)",
+                )
+                # Convert "All Categories" to None for the filter logic
+                category_filter = category if category and category != "All Categories" else None
+
+                # Campaign status filter (default to Enabled)
+                default_status_index = CAMPAIGN_STATUSES.index(DEFAULT_CAMPAIGN_STATUS)
+                campaign_status = st.selectbox(
+                    "Campaign Status",
+                    options=CAMPAIGN_STATUSES,
+                    index=default_status_index,
+                    help="Filter by campaign status (default: Enabled)",
+                )
+
                 campaign_contains = st.text_input(
                     "Campaign Contains",
                     placeholder="e.g., Brand, Performance",
@@ -719,14 +801,14 @@ def main():
 
                 # Execute aggregate comparison
                 matrix, queries = execute_comparison(
-                    platform, account_list, selected_metrics, date_ranges, campaign_filter
+                    platform, account_list, selected_metrics, date_ranges, campaign_filter, category_filter, campaign_status
                 )
                 st.session_state.comparison_results = matrix
                 st.session_state.comparison_queries = queries
 
                 # Execute campaign-level details
                 campaign_details = execute_campaign_details(
-                    platform, account_list, selected_metrics, date_ranges, campaign_filter
+                    platform, account_list, selected_metrics, date_ranges, campaign_filter, category_filter, campaign_status
                 )
                 st.session_state.campaign_details = campaign_details
 
