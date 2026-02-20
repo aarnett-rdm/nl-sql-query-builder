@@ -19,6 +19,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from tools.common import tsql_qualified_table  # noqa: E402
 from tools.config import AppConfig  # noqa: E402
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.metric_resolver import MetricRegistry  # noqa: E402
@@ -69,6 +70,46 @@ def load_metric_names() -> list[str]:
     """Load available metric names from the registry."""
     registry = MetricRegistry.from_path(METRIC_REGISTRY)
     return sorted(registry.metrics.keys())
+
+
+def load_account_names(platform: str) -> list[str]:
+    """
+    Load distinct account names for the specified platform.
+
+    Args:
+        platform: Platform filter (e.g., "google_ads", "microsoft_ads")
+
+    Returns:
+        Sorted list of account names
+    """
+    # Check if Fabric is connected
+    if not st.session_state.get("fabric_connected", False):
+        return []
+
+    if platform == "google_ads":
+        table = "GoTicketsCoreEntity.GoogleAdsAccount"
+    elif platform == "microsoft_ads":
+        table = "GoTicketsCoreEntity.MicrosoftAdsAccount"
+    else:
+        return []
+
+    # Format table name using the same function as the rest of the codebase
+    formatted_table = tsql_qualified_table(table)
+    # Add TOP manually to prevent FabricConnection from inserting it in the wrong position
+    # (T-SQL requires: SELECT DISTINCT TOP n, not SELECT TOP n DISTINCT)
+    sql = f"SELECT DISTINCT TOP 10000 AccountName FROM {formatted_table} ORDER BY AccountName"
+
+    try:
+        fc: FabricConnection = st.session_state.fabric_conn
+        df = fc.execute(sql, row_limit=None)
+        account_list = df["AccountName"].tolist()
+        # Debug: show how many accounts were loaded
+        if len(account_list) == 0:
+            st.warning(f"No accounts found for {platform}. Query: {sql}")
+        return account_list
+    except Exception as e:
+        st.error(f"Could not load account names for {platform}: {e}\nQuery: {sql}")
+        return []
 
 
 def build_spec_for_range(
@@ -502,6 +543,14 @@ def main():
         st.error(f"Failed to load metrics: {e}")
         return
 
+    # Initialize platform in session state if not set
+    if "mdr_selected_platform" not in st.session_state:
+        st.session_state.mdr_selected_platform = PLATFORMS[0]
+
+    # Load account names for the currently selected platform
+    available_accounts = load_account_names(st.session_state.mdr_selected_platform)
+    account_options = ["All Accounts"] + available_accounts
+
     # Metric selection and reordering (outside form)
     with st.expander("⚙️ Select & Reorder Metrics", expanded=True):
         # Default to common metrics that exist in registry
@@ -564,26 +613,36 @@ def main():
 
     # Input form (collapsible)
     with st.expander("⚙️ Filters & Date Ranges", expanded=True):
+        # Platform selector outside form so it updates accounts immediately
+        st.subheader("Platform")
+        platform = st.selectbox(
+            "Select Platform",
+            options=PLATFORMS,
+            format_func=lambda x: PLATFORM_LABELS.get(x, x),
+            index=PLATFORMS.index(st.session_state.mdr_selected_platform) if st.session_state.mdr_selected_platform in PLATFORMS else 0,
+            help="Select Google or Microsoft platform",
+            key="mdr_platform_selector"
+        )
+
+        # Update session state and reload accounts when platform changes
+        if platform != st.session_state.mdr_selected_platform:
+            st.session_state.mdr_selected_platform = platform
+            st.rerun()
+
         with st.form("comparison_form"):
             col1, col2 = st.columns(2)
 
             with col1:
                 st.subheader("Filters")
 
-                platform = st.selectbox(
-                    "Platform",
-                    options=PLATFORMS,
-                    format_func=lambda x: PLATFORM_LABELS.get(x, x),
-                    index=0,
-                    help="Select Google or Microsoft platform"
-                )
-
-                accounts = st.text_input(
+                accounts = st.selectbox(
                     "Account Name",
-                    placeholder="e.g., Go-Performer-Sports",
-                    help="Enter account name (leave blank for all accounts)",
+                    options=account_options,
+                    index=0,
+                    help="Select account name (or 'All Accounts' for all)",
                 )
-                account_list = [accounts.strip()] if accounts.strip() else []
+                # Convert to list format expected by the rest of the code
+                account_list = [accounts] if accounts and accounts != "All Accounts" else []
 
                 campaign_contains = st.text_input(
                     "Campaign Contains",

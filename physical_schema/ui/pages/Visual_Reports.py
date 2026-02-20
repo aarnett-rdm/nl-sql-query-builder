@@ -28,6 +28,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from tools.common import tsql_qualified_table  # noqa: E402
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.metric_resolver import MetricRegistry  # noqa: E402
 from tools.spec_executor import execute_spec, normalize_spec  # noqa: E402
@@ -96,6 +97,46 @@ def load_metric_names() -> list[str]:
     """Load available metric names from the registry."""
     registry = MetricRegistry.from_path(METRIC_REGISTRY)
     return sorted(registry.metrics.keys())
+
+
+def load_account_names(platform: str) -> list[str]:
+    """
+    Load distinct account names for the specified platform.
+
+    Args:
+        platform: Platform filter (e.g., "google_ads", "microsoft_ads")
+
+    Returns:
+        Sorted list of account names
+    """
+    # Check if Fabric is connected
+    if not st.session_state.get("fabric_connected", False):
+        return []
+
+    if platform == "google_ads":
+        table = "GoTicketsCoreEntity.GoogleAdsAccount"
+    elif platform == "microsoft_ads":
+        table = "GoTicketsCoreEntity.MicrosoftAdsAccount"
+    else:
+        return []
+
+    # Format table name using the same function as the rest of the codebase
+    formatted_table = tsql_qualified_table(table)
+    # Add TOP manually to prevent FabricConnection from inserting it in the wrong position
+    # (T-SQL requires: SELECT DISTINCT TOP n, not SELECT TOP n DISTINCT)
+    sql = f"SELECT DISTINCT TOP 10000 AccountName FROM {formatted_table} ORDER BY AccountName"
+
+    try:
+        fc: FabricConnection = st.session_state.fabric_conn
+        df = fc.execute(sql, row_limit=None)
+        account_list = df["AccountName"].tolist()
+        # Debug: show how many accounts were loaded
+        if len(account_list) == 0:
+            st.warning(f"No accounts found for {platform}. Query: {sql}")
+        return account_list
+    except Exception as e:
+        st.error(f"Could not load account names for {platform}: {e}\nQuery: {sql}")
+        return []
 
 
 def build_chart_spec(
@@ -360,6 +401,30 @@ def main():
     default_chart_type = template["chart_type"] if template else "Bar Chart"
     days_back = template.get("days_back", 7) if template else 7
 
+    # Initialize default platform in session state if not set
+    if "selected_platform" not in st.session_state:
+        st.session_state.selected_platform = PLATFORMS[0]
+
+    # Load account names for the currently selected platform
+    available_accounts = load_account_names(st.session_state.selected_platform)
+    account_options = ["All Accounts"] + available_accounts
+
+    # Platform selector outside form so it updates accounts immediately
+    st.subheader("Platform Selection")
+    platform = st.selectbox(
+        "Platform",
+        options=PLATFORMS,
+        format_func=lambda x: PLATFORM_LABELS.get(x, x),
+        index=PLATFORMS.index(st.session_state.selected_platform) if st.session_state.selected_platform in PLATFORMS else 0,
+        help="Select which platform to query",
+        key="vr_platform_selector"
+    )
+
+    # Update session state and reload accounts when platform changes
+    if platform != st.session_state.selected_platform:
+        st.session_state.selected_platform = platform
+        st.rerun()
+
     # Chart builder form
     with st.form("chart_builder"):
         st.subheader("📐 Chart Configuration")
@@ -368,14 +433,6 @@ def main():
 
         with col1:
             st.markdown("**Data Selection**")
-
-            platform = st.selectbox(
-                "Platform",
-                options=PLATFORMS,
-                format_func=lambda x: PLATFORM_LABELS.get(x, x),
-                index=0,
-                help="Select which platform to query"
-            )
 
             selected_metrics = st.multiselect(
                 "Metrics",
@@ -419,11 +476,15 @@ def main():
             )
 
             # Filters
-            account_filter = st.text_input(
+            account_filter = st.selectbox(
                 "Account Name",
-                placeholder="e.g., Go-Performer-Sports",
-                help="Filter by specific account (leave blank for all)"
+                options=account_options,
+                index=0,
+                help="Select account name (or 'All Accounts' for all)"
             )
+            # Convert "All Accounts" to empty string for the filter logic
+            if account_filter == "All Accounts":
+                account_filter = ""
 
             campaign_filter = st.text_input(
                 "Campaign Contains",
