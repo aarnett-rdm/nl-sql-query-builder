@@ -220,5 +220,63 @@
         }
       ]
     }
+  },
+  {
+    "question": "Show me clicks and cost for events ending in the next 30 days",
+    "spec": {
+      "grain": "event_calendar",
+      "platform": null,
+      "metrics": ["clicks", "cost"],
+      "dimensions": ["EventDate"],
+      "filters": {
+        "date": {},
+        "where": [
+          {
+            "field": "EventDateTimeLocal",
+            "op": ">=",
+            "value": "2026-02-20",
+            "case_insensitive": false
+          },
+          {
+            "field": "EventDateTimeLocal",
+            "op": "<=",
+            "value": "2026-03-22",
+            "case_insensitive": false
+          }
+        ]
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "Event date queries use event_calendar grain and EventDateTimeLocal in where filters for date range"
+  },
+  {
+    "question": "What are the top campaigns by ROI for events that ended last week?",
+    "spec": {
+      "grain": "campaign_calendar",
+      "platform": null,
+      "metrics": ["roi"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {},
+        "where": [
+          {
+            "field": "EventDateTimeLocal",
+            "op": ">=",
+            "value": "2026-02-10",
+            "case_insensitive": false
+          },
+          {
+            "field": "EventDateTimeLocal",
+            "op": "<=",
+            "value": "2026-02-16",
+            "case_insensitive": false
+          }
+        ]
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "Can use campaign_calendar grain while filtering on EventDateTimeLocal"
   }
 ]

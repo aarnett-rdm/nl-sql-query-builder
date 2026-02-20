@@ -251,6 +251,21 @@ def _resolve_dimension_expression(
         # Return None for GROUP BY to indicate it should be omitted
         return f"{literal} AS {_bracket_ident(dim.out_alias)}", None
 
+    # Special case: "EventDate" is a virtual dimension mapping to EventDateTimeLocal
+    if dim.column.lower() == "eventdate":
+        # Find Event table in aliases
+        event_table = None
+        for t in aliases:
+            if t.endswith(".Event"):
+                event_table = t
+                break
+
+        if event_table:
+            expr = f"{aliases[event_table]}.[EventDateTimeLocal]"
+            return f"CAST({expr} AS DATE) AS {_bracket_ident(dim.out_alias)}", f"CAST({expr} AS DATE)"
+        else:
+            raise ValueError("EventDate dimension requires Event table in join plan")
+
     matches: List[str] = []
 
     if dim.table:

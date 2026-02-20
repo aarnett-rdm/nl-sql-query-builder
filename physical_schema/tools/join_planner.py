@@ -145,9 +145,18 @@ class PhysicalSchema:
             if len(matches) == 1:
                 return matches[0]
             if len(matches) > 1:
-                raise ValueError(
-                    f"Ambiguous table '{name}'. Candidates: {matches[:10]}{'...' if len(matches) > 10 else ''}"
-                )
+                # Prefer CoreEntity > other schemas > Bronze (last resort)
+                core_matches = [m for m in matches if m.startswith("GoTicketsCoreEntity.")]
+                if core_matches:
+                    return core_matches[0]  # Use CoreEntity if available
+
+                # Exclude Bronze if other options exist
+                non_bronze = [m for m in matches if not m.startswith("GoTicketsBronze.")]
+                if non_bronze:
+                    return non_bronze[0]  # Use non-Bronze if available
+
+                # Last resort: use Bronze
+                return matches[0]
 
         raise ValueError(f"Unknown table '{name}'")
 
@@ -477,11 +486,25 @@ def default_targets(grain: str, platform: Optional[str] = None) -> List[str]:
         t.append("Utility.DimCalendar")
 
     # campaign_calendar: keep minimal; campaign->account chaining can be requested later
+    # Include Event table + mapping tables to support event date filtering
     if g in ("campaign_calendar", "campaign"):
         if p == "google_ads":
             t += ["GoTicketsCoreEntity.GoogleAdsCampaign"]
+            # Add Event path: Campaign → CampaignEventMap → Event
+            t += ["GoTicketsEntityMap.GoogleAdsCampaignEventMap", "GoTicketsCoreEntity.Event"]
         elif p == "microsoft_ads":
             t += ["GoTicketsCoreEntity.MicrosoftAdsCampaign"]
+            # Add Event path: Campaign → CampaignEventMap → Event
+            t += ["GoTicketsEntityMap.MicrosoftAdsCampaignEventMap", "GoTicketsCoreEntity.Event"]
+        else:
+            # For both platforms or no platform specified, add both Campaign tables + mapping paths
+            t += [
+                "GoTicketsCoreEntity.GoogleAdsCampaign",
+                "GoTicketsCoreEntity.MicrosoftAdsCampaign",
+                "GoTicketsEntityMap.GoogleAdsCampaignEventMap",
+                "GoTicketsEntityMap.MicrosoftAdsCampaignEventMap",
+                "GoTicketsCoreEntity.Event"
+            ]
 
     # adgroup calendar keeps account/campaign because adgroup often needs them together
     if g in ("adgroup_calendar", "adgroup"):

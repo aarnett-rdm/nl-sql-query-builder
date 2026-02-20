@@ -15385,6 +15385,36 @@
         }
       },
       {
+        "from_table": "GoTicketsEntityMap.GoogleAdsCampaignEventMap",
+        "to_table": "GoTicketsCoreEntity.Event",
+        "from_columns": [
+          "EventId"
+        ],
+        "to_columns": [
+          "EventId"
+        ],
+        "confidence": "high",
+        "evidence": {
+          "source": "manual_seed",
+          "reason": "CampaignEventMap bridges Campaign to Event via EventId"
+        }
+      },
+      {
+        "from_table": "GoTicketsEntityMap.MicrosoftAdsCampaignEventMap",
+        "to_table": "GoTicketsCoreEntity.Event",
+        "from_columns": [
+          "EventId"
+        ],
+        "to_columns": [
+          "EventId"
+        ],
+        "confidence": "high",
+        "evidence": {
+          "source": "manual_seed",
+          "reason": "CampaignEventMap bridges Campaign to Event via EventId"
+        }
+      },
+      {
         "from_table": "GoTicketsCoreEntity.Event",
         "from_columns": [
           "EventClusterId"
