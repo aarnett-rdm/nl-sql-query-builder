@@ -486,24 +486,17 @@ def default_targets(grain: str, platform: Optional[str] = None) -> List[str]:
         t.append("Utility.DimCalendar")
 
     # campaign_calendar: keep minimal; campaign->account chaining can be requested later
-    # Include Event table + mapping tables to support event date filtering
+    # Event tables are NOT included by default - only added when explicitly needed
     if g in ("campaign_calendar", "campaign"):
         if p == "google_ads":
             t += ["GoTicketsCoreEntity.GoogleAdsCampaign"]
-            # Add Event path: Campaign → CampaignEventMap → Event
-            t += ["GoTicketsEntityMap.GoogleAdsCampaignEventMap", "GoTicketsCoreEntity.Event"]
         elif p == "microsoft_ads":
             t += ["GoTicketsCoreEntity.MicrosoftAdsCampaign"]
-            # Add Event path: Campaign → CampaignEventMap → Event
-            t += ["GoTicketsEntityMap.MicrosoftAdsCampaignEventMap", "GoTicketsCoreEntity.Event"]
         else:
-            # For both platforms or no platform specified, add both Campaign tables + mapping paths
+            # For both platforms or no platform specified, add both Campaign tables
             t += [
                 "GoTicketsCoreEntity.GoogleAdsCampaign",
                 "GoTicketsCoreEntity.MicrosoftAdsCampaign",
-                "GoTicketsEntityMap.GoogleAdsCampaignEventMap",
-                "GoTicketsEntityMap.MicrosoftAdsCampaignEventMap",
-                "GoTicketsCoreEntity.Event"
             ]
 
     # adgroup calendar keeps account/campaign because adgroup often needs them together
