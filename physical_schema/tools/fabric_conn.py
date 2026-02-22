@@ -90,24 +90,25 @@ class FabricConnection:
     def execute(self, sql: str, row_limit: Optional[int] = None) -> pd.DataFrame:
         """Execute SQL and return results as a pandas DataFrame.
 
-        Wraps the query in a TOP clause if it doesn't already have one
-        to prevent accidentally pulling millions of rows.
+        NOTE: Automatic TOP insertion has been DISABLED because it causes issues with:
+        - CTEs (Common Table Expressions)
+        - DISTINCT clauses
+        - Complex queries with multiple SELECT statements
+
+        If row limiting is needed, include TOP explicitly in your SQL.
         """
         if self._conn is None:
             raise RuntimeError("Not connected. Call connect() first.")
 
-        limit = row_limit if row_limit is not None else self.row_limit
+        # DISABLED: Automatic TOP insertion
+        # limit = row_limit if row_limit is not None else self.row_limit
+        # if limit and "TOP " not in sql.upper().split("FROM")[0]:
+        #     idx = sql.upper().find("SELECT")
+        #     if idx >= 0:
+        #         insert_pos = idx + len("SELECT")
+        #         sql = sql[:insert_pos] + f" TOP {limit}" + sql[insert_pos:]
 
-        # Wrap with TOP if the query doesn't already limit rows
-        safe_sql = sql.strip()
-        if limit and "TOP " not in safe_sql.upper().split("FROM")[0]:
-            # Insert TOP after the first SELECT
-            idx = safe_sql.upper().find("SELECT")
-            if idx >= 0:
-                insert_pos = idx + len("SELECT")
-                safe_sql = safe_sql[:insert_pos] + f" TOP {limit}" + safe_sql[insert_pos:]
-
-        return pd.read_sql(safe_sql, self._conn)
+        return pd.read_sql(sql, self._conn)
 
     def close(self) -> None:
         """Close the pyodbc connection."""
