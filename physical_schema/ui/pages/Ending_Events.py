@@ -246,10 +246,12 @@ def build_custom_event_query(
     Build a custom SQL query for ending events using CTEs.
 
     This handles:
-    - Event date filtering via CTE
-    - Category filtering via Event → Performer → Category join chain
+    - Campaigns qualified ONLY if their LAST event falls in the ending window (HAVING MAX logic)
     - Multiple metric sources (campaign performance + exchange metrics)
-    - Proper aggregation to avoid fan-out
+    - Exchange revenue from ALL events during performance period for qualifying campaigns
+    - Proper aggregation to avoid fan-out (MAX for pre-aggregated CTEs)
+
+    Note: Category filtering removed - not relevant for ending events use case
     """
     # Determine platform-specific tables
     if platform == "google_ads":
@@ -265,8 +267,6 @@ def build_custom_event_query(
 
     event_table = tsql_qualified_table("GoTicketsCoreEntity.Event")
     calendar_table = tsql_qualified_table("Utility.DimCalendar")
-    performer_table = tsql_qualified_table("GoTicketsCoreEntity.Performer")
-    category_table = tsql_qualified_table("GoTicketsCoreEntity.Category")
     exchange_metric_table = tsql_qualified_table("GoTicketsExchangeMetric.ClosePeerExchangeMetric")
 
     # Load metric registry to separate metrics by source table
@@ -312,13 +312,8 @@ def build_custom_event_query(
                     seen_aliases.add(key)
                     perf_metric_selects.append(f"  {metric_sql.select_sql}")
 
-    # Build WHERE predicates for ending_campaigns CTE (includes category filter)
-    event_where_predicates = []
-
-    if category != "All Categories":
-        event_where_predicates.append(f"cat.[CategoryName] = '{escape_sql_string(category)}'")
-
-    event_where_clause = f"\n    AND {' AND '.join(event_where_predicates)}" if event_where_predicates else ""
+    # Category filtering removed - not relevant for ending events use case
+    # Campaigns are qualified by their LAST event falling in the ending window
 
     # Build WHERE predicates for main query
     main_where_predicates = []
@@ -354,17 +349,16 @@ def build_custom_event_query(
             exchange_cte = f""",
 exchange_metrics AS (
   -- Aggregate exchange metrics by campaign to avoid fan-out
-  -- Only include exchange revenue from events in the ending date range
+  -- Include ALL exchange revenue during performance period for qualifying campaigns
   SELECT
     cem.[CampaignId],
     {',\n    '.join(exchange_metric_aggs)}
   FROM {event_map_table} cem
+  JOIN ending_campaigns ec ON cem.[CampaignId] = ec.[CampaignId]
   JOIN {event_table} e ON cem.[EventId] = e.[EventId]
   JOIN {exchange_metric_table} ex ON e.[EventId] = ex.[EventId]
   JOIN {calendar_table} cal ON ex.[CalendarId] = cal.[CalendarId]
-  WHERE e.[EventDateTimeLocal] >= '{event_date_from.isoformat()}'
-    AND e.[EventDateTimeLocal] <= '{event_date_to.isoformat()}'
-    AND cal.[PST_Date] >= '{perf_date_from.isoformat()}'
+  WHERE cal.[PST_Date] >= '{perf_date_from.isoformat()}'
     AND cal.[PST_Date] <= '{perf_date_to.isoformat()}'
   GROUP BY cem.[CampaignId]
 )"""
@@ -382,21 +376,23 @@ exchange_metrics AS (
     if not all_selects:
         all_selects = ["  COUNT(*) AS [row_count]"]  # Fallback if no metrics
 
+    # For end-exclusive logic, add one day to the end date
+    from datetime import timedelta
+    event_date_to_exclusive = event_date_to + timedelta(days=1)
+
     # Build the query
     sql = f"""
--- Ending Events Query: Campaigns with events in {event_date_from} to {event_date_to}
+-- Ending Events Query: Campaigns whose LAST event falls in {event_date_from} to {event_date_to}
 -- Performance period: {perf_date_from} to {perf_date_to}
 
 WITH ending_campaigns AS (
-  -- Find campaigns that have at least one event in the target date range
-  -- Join to Performer → Category for category filtering
-  SELECT DISTINCT cem.[CampaignId]
+  -- Campaign qualifies ONLY if its LAST event datetime falls in the ending window
+  SELECT cem.[CampaignId]
   FROM {event_map_table} cem
   JOIN {event_table} e ON cem.[EventId] = e.[EventId]
-  JOIN {performer_table} p ON e.[PrimaryPerformerId] = p.[PerformerId]
-  JOIN {category_table} cat ON p.[PrimaryCategoryId] = cat.[CategoryId]
-  WHERE e.[EventDateTimeLocal] >= '{event_date_from.isoformat()}'
-    AND e.[EventDateTimeLocal] <= '{event_date_to.isoformat()}'{event_where_clause}
+  GROUP BY cem.[CampaignId]
+  HAVING MAX(e.[EventDateTimeLocal]) >= '{event_date_from.isoformat()}'
+     AND MAX(e.[EventDateTimeLocal]) <  '{event_date_to_exclusive.isoformat()}'
 ){exchange_cte}
 SELECT
   c.[CampaignName],
@@ -587,7 +583,7 @@ def main():
 
     # Filters
     st.subheader("Filters")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         platform = st.selectbox(
@@ -608,22 +604,16 @@ def main():
             options=["All Accounts"] + account_options,
         )
 
-    # Category filter
-    with col3:
-        with st.spinner("Loading categories..."):
-            category_options = load_category_names()
-        category = st.selectbox(
-            "Category",
-            options=["All Categories"] + category_options,
-        )
-
     # Campaign status filter
-    with col4:
+    with col3:
         campaign_status = st.selectbox(
             "Campaign Status",
             options=CAMPAIGN_STATUSES,
             index=CAMPAIGN_STATUSES.index(DEFAULT_CAMPAIGN_STATUS),
         )
+
+    # Category filter removed - not relevant for ending events use case
+    category = "All Categories"  # Set default value for backward compatibility
 
     # Campaign contains filter
     campaign_contains = st.text_input(
