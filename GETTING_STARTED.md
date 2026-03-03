@@ -62,28 +62,20 @@ Still in Command Prompt:
 
 ### Step 5: Create Your Configuration File
 
-The app needs a small configuration file with two settings: the shared API server URL and the shared feedback path. Your admin will give you both values.
+The app needs a small configuration file for the shared feedback path. The API connection is already pre-configured.
 
 1. In your `nl-sql-query-builder\physical_schema` folder, find the file called `.env.example`
 2. Make a copy of it and rename the copy to `.env` (no `.example` at the end)
 3. Open `.env` in Notepad
 4. Find the line that says:
    ```
-   NL_SQL_API_URL=http://localhost:8000
-   ```
-5. Replace `http://localhost:8000` with the shared API URL your admin gave you. It will look something like:
-   ```
-   NL_SQL_API_URL=https://nl-sql-api-production.up.railway.app
-   ```
-6. Find the line that says:
-   ```
    NL_SQL_FEEDBACK_PATH=
    ```
-7. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
+5. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
    ```
    NL_SQL_FEEDBACK_PATH=G:/Shared drives/Tickets/Sports Team/Query Tool Feedback/corrections.jsonl
    ```
-8. Save and close the file
+6. Save and close the file
 
 > **Note:** If your admin hasn't set up a shared folder yet, you can leave `NL_SQL_FEEDBACK_PATH` blank — your feedback will save locally on your own computer instead.
 
