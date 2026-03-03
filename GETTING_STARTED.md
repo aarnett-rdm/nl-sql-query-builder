@@ -62,22 +62,30 @@ Still in Command Prompt:
 
 ### Step 5: Create Your Configuration File
 
-The app needs a small configuration file to know where to save shared feedback.
+The app needs a small configuration file with two settings: the shared API server URL and the shared feedback path. Your admin will give you both values.
 
 1. In your `nl-sql-query-builder\physical_schema` folder, find the file called `.env.example`
 2. Make a copy of it and rename the copy to `.env` (no `.example` at the end)
 3. Open `.env` in Notepad
 4. Find the line that says:
    ```
+   NL_SQL_API_URL=http://localhost:8000
+   ```
+5. Replace `http://localhost:8000` with the shared API URL your admin gave you. It will look something like:
+   ```
+   NL_SQL_API_URL=https://nl-sql-api-production.up.railway.app
+   ```
+6. Find the line that says:
+   ```
    NL_SQL_FEEDBACK_PATH=
    ```
-5. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
+7. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
    ```
    NL_SQL_FEEDBACK_PATH=G:/Shared drives/Tickets/Sports Team/Query Tool Feedback/corrections.jsonl
    ```
-6. Save and close the file
+8. Save and close the file
 
-> **Note:** If your admin hasn't set up a shared folder yet, you can leave this blank — your feedback will save locally on your own computer instead.
+> **Note:** If your admin hasn't set up a shared folder yet, you can leave `NL_SQL_FEEDBACK_PATH` blank — your feedback will save locally on your own computer instead.
 
 ### Step 6: Create Desktop Shortcut (Optional but Recommended)
 
@@ -177,6 +185,14 @@ Or just close the Command Prompt window directly - the app will stop automatical
 2. Try clicking "Connect to Fabric" again
 3. Make sure you sign in with your work Microsoft account (not personal)
 4. Check with IT if you still can't connect
+
+### AI features not working (queries return no results or look wrong)
+
+**Fix:** The app can't reach the shared API server.
+1. Open your `.env` file in Notepad (it's in `nl-sql-query-builder\physical_schema\`)
+2. Check that `NL_SQL_API_URL=` has the correct URL your admin gave you — it should start with `https://`, not `http://localhost`
+3. Save the file and restart the app
+4. If it still doesn't work, contact your admin to confirm the API server is running
 
 ### "ModuleNotFoundError" or "No module named..."
 

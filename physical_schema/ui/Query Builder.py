@@ -10,6 +10,7 @@ Requires the FastAPI backend running on http://localhost:8000.
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import uuid
@@ -24,6 +25,12 @@ import streamlit as st
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(_PROJECT_ROOT / ".env", override=False)
+except ImportError:
+    pass
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.query_history_store import QueryHistoryStore, QueryRecord  # noqa: E402
@@ -40,7 +47,7 @@ _history_store = QueryHistoryStore(_PROJECT_ROOT / "history" / "queries.jsonl")
 # Configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_API_URL = "http://localhost:8000"
+DEFAULT_API_URL = os.getenv("NL_SQL_API_URL", "http://localhost:8000")
 CONTEXT_TIMEOUT_SECS = 600  # Auto-expire previous query context after 10 minutes
 
 # ---------------------------------------------------------------------------

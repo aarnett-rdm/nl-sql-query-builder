@@ -77,6 +77,15 @@ class FabricConnection:
         # SQL_COPT_SS_ACCESS_TOKEN = 1256
         self._conn = pyodbc.connect(conn_str, attrs_before={1256: token_bytes})
 
+    # Phrases that indicate the TCP connection was dropped server-side.
+    # Checked case-insensitively against str(exception).
+    _STALE_CONNECTION_PHRASES = (
+        "communication link failure",
+        "broken pipe",
+        "transport-level error",
+        "08s01",
+    )
+
     def is_connected(self) -> bool:
         """Check if the connection is alive."""
         if self._conn is None:
@@ -87,8 +96,16 @@ class FabricConnection:
         except Exception:
             return False
 
+    def _is_stale_connection_error(self, exc: Exception) -> bool:
+        """Return True if *exc* looks like a dropped/stale TCP connection."""
+        err_lower = str(exc).lower()
+        return any(phrase in err_lower for phrase in self._STALE_CONNECTION_PHRASES)
+
     def execute(self, sql: str, row_limit: Optional[int] = None) -> pd.DataFrame:
         """Execute SQL and return results as a pandas DataFrame.
+
+        If the underlying TCP connection has gone stale (e.g. after idle time),
+        a single transparent reconnect is attempted before raising the error.
 
         NOTE: Automatic TOP insertion has been DISABLED because it causes issues with:
         - CTEs (Common Table Expressions)
@@ -108,7 +125,16 @@ class FabricConnection:
         #         insert_pos = idx + len("SELECT")
         #         sql = sql[:insert_pos] + f" TOP {limit}" + sql[insert_pos:]
 
-        return pd.read_sql(sql, self._conn)
+        try:
+            return pd.read_sql(sql, self._conn)
+        except Exception as first_exc:
+            if not self._is_stale_connection_error(first_exc):
+                raise
+            # Stale connection — attempt one silent reconnect (uses cached Azure AD
+            # token; only opens a browser if the refresh token itself has expired).
+            self._conn = None
+            self.connect()
+            return pd.read_sql(sql, self._conn)
 
     def close(self) -> None:
         """Close the pyodbc connection."""
