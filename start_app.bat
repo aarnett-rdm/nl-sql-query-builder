@@ -45,19 +45,6 @@ if errorlevel 1 (
 REM Install/update Python dependencies
 echo [2/4] Installing/updating dependencies...
 echo.
-pip install -q -r physical_schema/requirements.txt
-if errorlevel 1 (
-    echo.
-    echo [ERROR] Failed to install main dependencies.
-    echo.
-    echo Try running this command manually:
-    echo   pip install -r physical_schema/requirements.txt
-    echo.
-    echo Press any key to exit...
-    pause >nul
-    exit /b 1
-)
-
 pip install -q -r physical_schema/ui/requirements.txt
 if errorlevel 1 (
     echo.
