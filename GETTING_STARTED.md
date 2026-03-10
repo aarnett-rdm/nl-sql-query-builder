@@ -55,7 +55,6 @@ Still in Command Prompt:
    ```
 2. Install required packages (this takes 2-3 minutes):
    ```
-   pip install -r physical_schema/requirements.txt
    pip install -r physical_schema/ui/requirements.txt
    ```
 3. Wait for everything to install - you'll see lots of text scroll by, this is normal!
