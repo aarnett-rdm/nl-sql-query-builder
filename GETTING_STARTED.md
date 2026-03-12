@@ -157,11 +157,19 @@ Or just close the Command Prompt window directly - the app will stop automatical
 1. Restart your computer (this refreshes PATH settings)
 2. If still not working, reinstall Git and make sure to check "Add to PATH" during installation
 
-### "python is not recognized as a command"
+### "Python was not found" or "python is not recognized as a command"
 
-**Fix:** Python wasn't installed correctly or isn't in your PATH.
-1. Restart your computer
-2. If still not working, reinstall Python and **make sure to check "Add Python to PATH"**
+This is often caused by a Windows setting that intercepts the `python` command and redirects it to the Microsoft Store — even if Python is already installed.
+
+**Fix 1: Disable the Windows App Execution Alias (most common fix on Windows 11)**
+1. Open **Settings** → **Apps** → **Advanced app settings** → **App execution aliases**
+2. Turn **off** both `python.exe` and `python3.exe`
+3. Open a new Command Prompt and run `python --version` to confirm it works
+
+**Fix 2: Python isn't installed**
+1. Go to https://www.python.org/downloads/ and install Python
+2. **Make sure to check "Add Python to PATH"** during installation
+3. Restart your computer after installing
 
 ### "Address already in use" or "Port 8501 is already in use"
 
