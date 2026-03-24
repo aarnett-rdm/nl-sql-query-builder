@@ -200,7 +200,6 @@ This is often caused by a Windows setting that intercepts the `python` command a
 2. Navigate to the app folder: `cd Documents\nl-sql-query-builder`
 3. Re-run the install commands:
    ```
-   pip install -r physical_schema/requirements.txt
    pip install -r physical_schema/ui/requirements.txt
    ```
 

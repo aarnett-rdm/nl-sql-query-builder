@@ -10,7 +10,7 @@ Natural language to SQL query builder with LLM integration, built for querying M
 ```bash
 git clone https://github.com/aarnett-rdm/nl-sql-query-builder.git
 cd nl-sql-query-builder
-pip install -r physical_schema/requirements.txt -r physical_schema/ui/requirements.txt
+pip install -r physical_schema/ui/requirements.txt
 # Then run: start_app.bat (Windows)
 ```
 
@@ -24,7 +24,7 @@ Ask questions in plain English, get SQL queries and results from your data wareh
 
 ## ✨ Features
 
-- 🤖 **LLM-Powered**: Uses Ollama (qwen3:14b) to understand natural language
+- 🤖 **LLM-Powered**: Uses Groq (cloud, default) or Ollama (local) to understand natural language
 - 📊 **Interactive Visualizations**: Auto-generated Plotly charts (line, bar, area, etc.) with export to PNG/HTML
 - 📈 **Visual Reports Builder**: Custom chart builder with templates, save/load configs, and multi-metric support
 - 📊 **Multi-Date Reporting**: Compare metrics across multiple date ranges with visualization
@@ -52,14 +52,13 @@ Fabric Connection → Results
 **Key Components:**
 - **API**: FastAPI backend (`physical_schema/api/app.py`)
 - **UI**: Streamlit chat app (`physical_schema/ui/Query Builder.py`)
-- **LLM**: Ollama integration with fallback to rule-based parser
+- **LLM**: Groq (cloud, default) with Ollama local fallback
 - **Tests**: 260 tests across 18 test files
 - **Docs**: Complete user guides and cheat sheets
 
 ## 📚 Documentation
 
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** - Complete setup guide for users
-- **[GIT_CHEAT_SHEET.md](GIT_CHEAT_SHEET.md)** - Git basics (clone, pull, status)
 - **[physical_schema/spec.md](physical_schema/spec.md)** - Spec format reference
 - **[TODO.md](TODO.md)** - Project roadmap and priorities
 - **[PROGRESS.md](PROGRESS.md)** - Development history
@@ -81,7 +80,7 @@ physical_schema/
 │   ├── shared.py          # Shared UI utilities (format_results, Fabric sidebar)
 │   └── viz_utils.py       # Visualization utilities (Plotly chart generation)
 ├── tools/                  # Core logic
-│   ├── llm_adapter.py     # LLM integration (Ollama)
+│   ├── llm_adapter.py     # LLM integration (Groq/Ollama)
 │   ├── spec_executor.py   # Spec → Query plan
 │   ├── query_builder.py   # Query plan → SQL
 │   ├── metric_resolver.py # Metric registry & multi-fact CTE
@@ -114,7 +113,7 @@ physical_schema/
 cd physical_schema
 pytest tests/                          # All tests (260)
 pytest tests/test_golden_queries.py    # Golden queries only
-pytest tests/test_llm_parity.py        # LLM parity tests (needs Ollama)
+pytest tests/test_llm_parity.py        # LLM parity tests
 ```
 
 ### Running the API
@@ -158,11 +157,12 @@ Generates: `feedback/RECOMMENDATIONS.md` with improvement suggestions
 Environment variables (create `.env` in `physical_schema/`):
 
 ```bash
-# LLM
-NL_SQL_LLM_PROVIDER=ollama
-NL_SQL_LLM_BASE_URL=http://192.168.12.51:11434
-NL_SQL_LLM_MODEL=qwen3:14b
+# LLM (Groq is default; set GROQ_API_KEY in Railway or .env)
+NL_SQL_LLM_PROVIDER=groq
 NL_SQL_LLM_TIMEOUT=60
+# Optional: local Ollama fallback
+# NL_SQL_LLM_FALLBACK=ollama
+# NL_SQL_LLM_BASE_URL=http://192.168.12.51:11434
 
 # Fabric DW
 FABRIC_SERVER=your-workspace.datawarehouse.fabric.microsoft.com
@@ -216,7 +216,7 @@ Internal tool for Red Dog Media Inc.
 
 ## 🎓 Learning Resources
 
-New to Git? Check out [GIT_CHEAT_SHEET.md](GIT_CHEAT_SHEET.md) - it covers just the 3 commands you need!
+New to Git? Check out [GETTING_STARTED.md](GETTING_STARTED.md) — it covers everything you need.
 
 ## 🔄 Feedback & Continuous Improvement
 
@@ -258,4 +258,4 @@ Access via Streamlit sidebar → **Feedback Dashboard**:
 
 ---
 
-**Built with**: Python, FastAPI, Streamlit, Ollama, Microsoft Fabric
+**Built with**: Python, FastAPI, Streamlit, Groq, Microsoft Fabric
