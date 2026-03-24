@@ -731,7 +731,7 @@ def build_llm_adapter(
     # Auto-select backend from env if not explicitly provided
     if backend is None:
         import os
-        provider = os.getenv("NL_SQL_LLM_PROVIDER", "ollama").lower()
+        provider = os.getenv("NL_SQL_LLM_PROVIDER", "groq").lower()
         fallback_provider = os.getenv("NL_SQL_LLM_FALLBACK", "").lower()
 
         def _make_groq() -> LLMBackend:

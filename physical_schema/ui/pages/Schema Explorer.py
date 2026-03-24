@@ -13,6 +13,10 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from streamlit_agraph import Config as AConfig
+from streamlit_agraph import Edge as AEdge
+from streamlit_agraph import Node as ANode
+from streamlit_agraph import agraph
 
 # Ensure tools/ is importable (same pattern as multi_date.py)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -220,6 +224,20 @@ def build_column_data(schema_path: str) -> dict[str, list[tuple[str, str]]]:
 
 
 @st.cache_data(ttl=3600)
+def build_table_to_metrics(registry_path: str) -> dict[str, list[str]]:
+    """Reverse mapping: table_name → list of metric keys that reference it."""
+    with open(registry_path) as f:
+        registry_json = json.load(f)
+    result: dict[str, list[str]] = {}
+    for metric_key, metric_def in registry_json["metrics"].items():
+        for grain_dict in metric_def.get("preferred_fact_table", {}).values():
+            for tbl_list in grain_dict.values():
+                for tbl in tbl_list:
+                    result.setdefault(tbl, []).append(metric_key)
+    return result
+
+
+@st.cache_data(ttl=3600)
 def build_unregistered_neighbors(
     schema_path: str, table_names: tuple[str, ...], platform: str
 ) -> tuple[list[str], list[dict]]:
@@ -369,7 +387,7 @@ def build_usage_stats(registry_path: str, history_path: str) -> dict:
     }
 
 
-def build_plotly_graph(
+def build_agraph_data(
     nodes: list[str],
     edges: list[dict],
     fact_tables: list[str],
@@ -379,73 +397,34 @@ def build_plotly_graph(
     focus_tables: list[str],
     ghost_nodes: set[str] | None = None,
     column_data: dict | None = None,
-) -> "go.Figure":
-    """Build a Plotly network graph from node/edge data.
-
-    Args:
-        nodes: All table names in the graph.
-        edges: Join edge dicts with keys: from, to, confidence, join_cols.
-        fact_tables: Subset of nodes that are fact/metric tables.
-        high_only: When True, omit medium/low-confidence edges.
-        usage_stats: Output of build_usage_stats() — contains fact_table_counts.
-        view_mode: One of "Full", "Active only", "Discovery".
-        focus_tables: When non-empty, show the union of each table's 1-hop neighbourhood.
-        ghost_nodes: Tables present in the physical schema but not the metric registry.
-                     Rendered faded (opacity 0.35) with a gray fill.
-        column_data: {table_name: [(col_name, data_type), ...]} shown in hover tooltip.
-    """
+) -> "tuple[list, list]":
+    """Build Node/Edge lists for streamlit-agraph interactive graph."""
     import math
-
-    import networkx as nx
-    import plotly.graph_objects as go
+    from collections import Counter, defaultdict
 
     ghost_nodes = ghost_nodes or set()
     column_data = column_data or {}
-
     fact_set = set(fact_tables)
     fact_table_counts: dict[str, int] = usage_stats.get("fact_table_counts", {})
     MAPPING_KEYWORDS = {"entitymap", "map", "mapping", "bridge", "xref", "junction"}
-    DISCOVERY_GOLD = "#F59E0B"  # amber — unexplored dimension tables
+    DISCOVERY_GOLD = "#F59E0B"
 
-    # ------------------------------------------------------------------ helpers
+    # ── Filter ────────────────────────────────────────────────────────────────
 
-    def node_base_color(name: str) -> str:
-        if name in fact_set:
-            return "#4C72B0"
-        if any(k in name.lower() for k in MAPPING_KEYWORDS):
-            return "#DD8452"
-        return "#55A868"
-
-    def short_label(name: str) -> str:
-        label = name
-        label = label.replace("GoogleAds", "GA·")
-        label = label.replace("MicrosoftAds", "MS·")
-        label = label.replace("PerformanceMetric", "Perf")
-        label = label.replace("AuctionInsightMetric", "Auction")
-        label = label.replace("BidChange", "Bid")
-        return label
-
-    # ------------------------------------------------------------------ filter
-
+    working_edges = [e for e in edges if not high_only or e["confidence"] == "high"]
     working_nodes = list(nodes)
-    working_edges = list(edges)
+    focus_set = set(f for f in focus_tables if f in working_nodes)
 
-    # Focus mode — union of 1-hop neighbourhoods for all selected tables
-    valid_focus = [t for t in focus_tables if t in working_nodes]
-    focus_set: set[str] = set(valid_focus)  # used later for chain-edge & node highlighting
-    if valid_focus:
+    if focus_set:
         focus_edges = [
-            e for e in working_edges
-            if e["from"] in valid_focus or e["to"] in valid_focus
+            e for e in working_edges if e["from"] in focus_set or e["to"] in focus_set
         ]
-        focus_nodes: set[str] = set(valid_focus)
+        focus_node_set: set[str] = set(focus_set)
         for e in focus_edges:
-            focus_nodes.add(e["from"])
-            focus_nodes.add(e["to"])
-        working_nodes = [n for n in working_nodes if n in focus_nodes]
+            focus_node_set.add(e["from"])
+            focus_node_set.add(e["to"])
+        working_nodes = [n for n in working_nodes if n in focus_node_set]
         working_edges = focus_edges
-
-    # Active only — remove fact tables with zero queries and their orphaned dims
     elif view_mode == "Active only":
         active_facts = {ft for ft in fact_tables if fact_table_counts.get(ft, 0) > 0}
         keep_edges = [e for e in working_edges if e["from"] in active_facts]
@@ -453,239 +432,238 @@ def build_plotly_graph(
         working_nodes = [n for n in working_nodes if n in reachable]
         working_edges = keep_edges
 
-    # ------------------------------------------------------------------ build graph
+    # ── Adjacency dicts for hover + bridge detection ──────────────────────────
 
-    G = nx.DiGraph()
-    G.add_nodes_from(working_nodes)
+    outgoing: dict[str, list[str]] = defaultdict(list)
+    incoming: dict[str, list[str]] = defaultdict(list)
     for e in working_edges:
-        if high_only and e["confidence"] != "high":
-            continue
-        G.add_edge(e["from"], e["to"], confidence=e["confidence"], join_cols=e["join_cols"])
+        outgoing[e["from"]].append(e["to"])
+        incoming[e["to"]].append(e["from"])
 
-    if G.number_of_nodes() == 0:
-        return None
-
-    pos = nx.spring_layout(G, seed=42, k=2.5)
-
-    # ------------------------------------------------------------------ bridge dims
-    # A bridge dimension is adjacent to 2+ selected fact tables.  It is the actual
-    # join path between those tables in a star schema (fact→dim←fact).
     bridge_dims: set[str] = set()
     if focus_set:
-        from collections import Counter
         dim_counts: Counter[str] = Counter()
-        for u, v in G.edges():
-            if u in focus_set and v not in focus_set:
-                dim_counts[v] += 1
-            elif v in focus_set and u not in focus_set:
-                dim_counts[u] += 1
+        for e in working_edges:
+            if e["from"] in focus_set and e["to"] not in focus_set:
+                dim_counts[e["to"]] += 1
+            elif e["to"] in focus_set and e["from"] not in focus_set:
+                dim_counts[e["from"]] += 1
         bridge_dims = {d for d, cnt in dim_counts.items() if cnt >= 2}
 
-    # ------------------------------------------------------------------ per-node helpers (need G)
+    # ── Node helpers ──────────────────────────────────────────────────────────
 
-    def _neighbor_score(name: str) -> int:
-        return sum(fact_table_counts.get(p, 0) for p in G.predecessors(name))
-
-    def effective_node_color(name: str) -> str:
+    def node_bg_color(name: str) -> str:
         if name in ghost_nodes:
-            return "#BBBBBB"  # light gray — not in metric registry
-        if view_mode == "Discovery" and name not in fact_set:
-            if _neighbor_score(name) == 0:
+            return "#BBBBBB"
+        if name in fact_set:
+            if view_mode == "Full" and fact_table_counts.get(name, 0) == 0:
+                return "#A8BCCF"  # desaturated — never queried
+            return "#4C72B0"
+        if any(k in name.lower() for k in MAPPING_KEYWORDS):
+            return "#DD8452"
+        if view_mode == "Discovery":
+            score = sum(fact_table_counts.get(p, 0) for p in incoming[name])
+            if score == 0:
                 return DISCOVERY_GOLD
-        return node_base_color(name)
+        return "#55A868"
 
-    def effective_node_size(name: str) -> float:
+    def node_size(name: str) -> float:
         if name in ghost_nodes:
-            return 8  # smaller to de-emphasise unregistered tables
+            return 12
         if name in fact_set:
             count = fact_table_counts.get(name, 0)
-            return min(12 + math.log1p(count) * 5, 32)
-        score = _neighbor_score(name)
-        return min(8 + math.log1p(score) * 3, 20)
+            return min(15 + math.log1p(count) * 5, 35)
+        score = sum(fact_table_counts.get(p, 0) for p in incoming[name])
+        return min(10 + math.log1p(score) * 3, 22)
 
-    def effective_node_opacity(name: str) -> float:
-        if name in ghost_nodes:
-            return 0.35  # faded — not in metric registry
-        # Ghost fact tables that have never been queried (Full mode only)
-        if name in fact_set and view_mode == "Full":
-            return 1.0 if fact_table_counts.get(name, 0) > 0 else 0.25
-        return 1.0
+    def short_label(name: str) -> str:
+        return (
+            name.replace("GoogleAds", "GA·")
+            .replace("MicrosoftAds", "MS·")
+            .replace("PerformanceMetric", "Perf")
+            .replace("AuctionInsightMetric", "Auction")
+            .replace("BidChange", "Bid")
+        )
 
-    def build_hover(name: str, node_type: str) -> str:
-        successors = list(G.successors(name))
-        predecessors = list(G.predecessors(name))
-        text = f"<b>{name}</b><br>Type: {node_type}"
+    def node_hover(name: str) -> str:
+        parts = [f"<b>{name}</b>"]
         if name in ghost_nodes:
-            text += "<br><i>⚠ Not in metric registry — physical schema only</i>"
-        if successors:
-            text += "<br>Joins to: " + ", ".join(successors[:4])
-            if len(successors) > 4:
-                text += f" (+{len(successors) - 4} more)"
-        if predecessors:
-            text += "<br>Referenced by: " + ", ".join(predecessors[:4])
+            parts.append("<i>⚠ Not in metric registry</i>")
+        succs = outgoing[name]
+        preds = incoming[name]
+        if succs:
+            shown = ", ".join(succs[:4])
+            if len(succs) > 4:
+                shown += f" (+{len(succs) - 4} more)"
+            parts.append(f"Joins to: {shown}")
+        if preds:
+            parts.append("Referenced by: " + ", ".join(preds[:4]))
         if name in fact_set:
             count = fact_table_counts.get(name, 0)
-            text += f"<br><b>Queries: {count:,}</b>" if count else "<br>Queries: 0 (never queried)"
+            parts.append(f"<b>Queries: {count:,}</b>" if count else "Queries: 0 (never queried)")
         else:
-            score = _neighbor_score(name)
-            if score > 0:
-                text += f"<br>Reachable via {score:,} queries"
+            score = sum(fact_table_counts.get(p, 0) for p in incoming[name])
+            if score:
+                parts.append(f"Reachable via {score:,} queries")
             else:
-                text += "<br>Unexplored (no queried fact tables connect here)"
-        # Column list (capped at 10 to keep tooltip readable)
+                parts.append("Unexplored (no queried fact tables connect here)")
         cols = column_data.get(name, [])
         if cols:
-            text += "<br><br><b>Columns:</b>"
+            parts.append("<br><b>Columns:</b>")
             for col_name, dtype in cols[:10]:
-                text += f"<br>&nbsp;&nbsp;{col_name} <i>({dtype})</i>"
+                parts.append(f"&nbsp;&nbsp;{col_name} <i>({dtype})</i>")
             if len(cols) > 10:
-                text += f"<br>&nbsp;&nbsp;… +{len(cols) - 10} more"
-        return text
+                parts.append(f"&nbsp;&nbsp;… +{len(cols) - 10} more")
+        parts.append("<br><i>Click node for full details</i>")
+        return "<br>".join(parts)
 
-    # ------------------------------------------------------------------ edge traces
-    #
-    # In focus mode three tiers exist:
-    #   "bridge"    — edge connects a selected table to a bridge dimension
-    #                 (shared by 2+ selected fact tables → the actual join path)
-    #   "available" — edge connects a selected table to a non-bridge neighbour
-    #   "direct"    — edge between two selected tables (rare, non-star schemas)
-    #
-    # Outside focus mode the existing confidence-based styles are used unchanged.
+    # ── Build nodes ───────────────────────────────────────────────────────────
 
-    BRIDGE_STYLE    = dict(color="#111111", width=3.5, dash="solid")
-    AVAILABLE_STYLE = dict(color="#888888", width=1.5, dash="dash")
-    conf_styles = {
-        "high":   dict(color="#444444", width=2,   dash="solid"),
-        "medium": dict(color="#999999", width=1.5, dash="dash"),
-        "low":    dict(color="#CCCCCC", width=1,   dash="dot"),
-    }
-    conf_labels = {
-        "high":   "High confidence join",
-        "medium": "Medium confidence join",
-        "low":    "Low confidence join",
-    }
-    conf_shown    = {c: False for c in conf_styles}
-    bridge_shown  = False
-    avail_shown   = False
-
-    def _edge_kind(u: str, v: str) -> str:
-        if not focus_set:
-            return "conf"
-        either_selected = u in focus_set or v in focus_set
-        if not either_selected:
-            return "conf"
-        is_bridge_edge = (u in bridge_dims or v in bridge_dims)
-        if is_bridge_edge:
-            return "bridge"
-        return "available"
-
-    edge_traces = []
-    for u, v, data in G.edges(data=True):
-        x0, y0 = pos[u]
-        x1, y1 = pos[v]
-        kind = _edge_kind(u, v)
-        if kind == "bridge":
-            style = BRIDGE_STYLE
-            show = not bridge_shown
-            bridge_shown = True
-            legend_name = "Join chain (shared dimension)"
-            legend_group = "bridge"
-        elif kind == "available":
-            style = AVAILABLE_STYLE
-            show = not avail_shown
-            avail_shown = True
-            legend_name = "Available join"
-            legend_group = "available"
-        else:
-            conf = data.get("confidence", "medium")
-            style = conf_styles.get(conf, conf_styles["medium"])
-            show = not conf_shown[conf]
-            conf_shown[conf] = True
-            legend_name = conf_labels[conf]
-            legend_group = conf
-        edge_traces.append(
-            go.Scatter(
-                x=[x0, x1, None],
-                y=[y0, y1, None],
-                mode="lines",
-                line=dict(color=style["color"], width=style["width"], dash=style["dash"]),
-                hoverinfo="none",
-                name=legend_name,
-                legendgroup=legend_group,
-                showlegend=show,
+    ag_nodes = []
+    for name in working_nodes:
+        is_selected = name in focus_set
+        is_bridge = name in bridge_dims
+        bg = node_bg_color(name)
+        border = "#F59E0B" if is_selected else ("#8B5CF6" if is_bridge else "#FFFFFF")
+        border_width = 4 if (is_selected or is_bridge) else 1
+        ag_nodes.append(
+            ANode(
+                id=name,
+                label=short_label(name),
+                size=node_size(name),
+                color={"background": bg, "border": border,
+                       "highlight": {"background": bg, "border": "#F59E0B"}},
+                borderWidth=border_width,
+                title=node_hover(name),
+                font={"size": 11 if name in fact_set else 9,
+                      "bold": str(is_selected or is_bridge).lower()},
             )
         )
 
-    # ------------------------------------------------------------------ node traces
+    # ── Build edges ───────────────────────────────────────────────────────────
 
-    color_to_type = {
-        "#4C72B0": "Fact / Metric table",
-        "#55A868": "Dimension table",
-        "#DD8452": "Mapping / Bridge table",
-        DISCOVERY_GOLD: "Unexplored dimension",
-        "#BBBBBB": "Unregistered (schema only)",
-    }
+    conf_colors = {"high": "#555555", "medium": "#999999", "low": "#CCCCCC"}
+    conf_widths = {"high": 2.5, "medium": 1.5, "low": 1.0}
 
-    node_traces = []
-    type_shown: dict[str, bool] = {}
-
-    for node in G.nodes():
-        color = effective_node_color(node)
-        node_type = color_to_type.get(color, "Dimension table")
-        x, y = pos[node]
-
-        hover = build_hover(node, node_type)
-        show = node_type not in type_shown
-        type_shown[node_type] = True
-
-        is_selected = node in focus_set
-        is_bridge   = node in bridge_dims
-        ring_color  = "#F59E0B" if is_selected else ("#8B5CF6" if is_bridge else "white")
-        ring_width  = 4 if is_selected else (3 if is_bridge else 1)
-        node_traces.append(
-            go.Scatter(
-                x=[x],
-                y=[y],
-                mode="markers+text",
-                text=[short_label(node)],
-                textposition="top center",
-                textfont=dict(
-                    size=10 if node in fact_set else 8,
-                    color="#111111" if (is_selected or is_bridge) else None,
-                    weight="bold" if (is_selected or is_bridge) else None,  # type: ignore[arg-type]
-                ),
-                hovertext=[hover],
-                hoverinfo="text",
-                opacity=effective_node_opacity(node),
-                marker=dict(
-                    size=effective_node_size(node) * (1.4 if is_selected else 1.0),
-                    color=color,
-                    line=dict(width=ring_width, color=ring_color),
-                ),
-                name=node_type,
-                legendgroup=node_type,
-                showlegend=show,
+    ag_edges = []
+    for e in working_edges:
+        conf = e.get("confidence", "medium")
+        is_bridge_edge = bool(focus_set) and (
+            e["from"] in bridge_dims or e["to"] in bridge_dims
+        )
+        color = "#111111" if is_bridge_edge else conf_colors.get(conf, "#999999")
+        width = 3.5 if is_bridge_edge else conf_widths.get(conf, 1.5)
+        dashes = not is_bridge_edge and conf != "high"
+        ag_edges.append(
+            AEdge(
+                source=e["from"],
+                target=e["to"],
+                color=color,
+                width=width,
+                dashes=dashes,
+                title=e.get("join_cols", ""),
+                arrows="to",
             )
         )
 
-    fig = go.Figure(data=edge_traces + node_traces)
-    fig.update_layout(
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        margin=dict(l=20, r=20, t=20, b=20),
-        plot_bgcolor="white",
-        height=650,
-        hovermode="closest",
-        legend=dict(
-            orientation="v",
-            x=1.01,
-            y=1,
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#DDDDDD",
-            borderwidth=1,
-        ),
+    return ag_nodes, ag_edges
+
+
+def _render_node_detail(
+    selected_table: str,
+    fact_tables: list[str],
+    ghost_nodes: set[str],
+    column_data: dict,
+    merged_edges: list[dict],
+    fact_table_counts: dict,
+    registry_path: str,
+) -> None:
+    """Render the detail panel for a selected graph node."""
+    MAPPING_KEYWORDS = {"entitymap", "map", "mapping", "bridge", "xref", "junction"}
+    fact_set = set(fact_tables)
+
+    hdr_col, clear_col = st.columns([5, 1])
+    with hdr_col:
+        st.subheader(f"📋 {selected_table}")
+    with clear_col:
+        st.write("")
+        if st.button("✕ Clear", key="clear_selected_node"):
+            st.session_state["selected_graph_node"] = None
+            st.rerun()
+
+    if selected_table in fact_set:
+        type_label, type_color = "Fact / Metric Table", "#4C72B0"
+    elif any(k in selected_table.lower() for k in MAPPING_KEYWORDS):
+        type_label, type_color = "Mapping / Bridge Table", "#DD8452"
+    else:
+        type_label, type_color = "Dimension Table", "#55A868"
+
+    st.markdown(
+        f'<span style="background:{type_color};color:white;padding:2px 8px;'
+        f'border-radius:4px;font-size:0.85em">{type_label}</span>',
+        unsafe_allow_html=True,
     )
-    return fig
+    if selected_table in ghost_nodes:
+        st.caption("⚠ This table is in the physical schema but not referenced by any metric.")
+
+    if selected_table in fact_set:
+        count = fact_table_counts.get(selected_table, 0)
+        st.info(f"**{count:,}** queries have used this fact table in history.")
+
+    dcol1, dcol2, dcol3 = st.columns(3)
+
+    with dcol1:
+        st.markdown("**Columns**")
+        cols = column_data.get(selected_table, [])
+        if cols:
+            col_df = pd.DataFrame(cols, columns=["Column", "Type"])
+            st.dataframe(col_df, use_container_width=True, hide_index=True, height=260)
+        else:
+            st.caption("No column data available.")
+
+    with dcol2:
+        st.markdown("**Metrics using this table**")
+        table_metrics = build_table_to_metrics(registry_path)
+        metrics_here = sorted(table_metrics.get(selected_table, []))
+        if metrics_here:
+            for m in metrics_here:
+                st.markdown(f"- `{m}`")
+        else:
+            st.caption("No metrics directly reference this table.")
+
+    with dcol3:
+        st.markdown("**Join paths**")
+        out_edges = [e for e in merged_edges if e["from"] == selected_table]
+        in_edges = [e for e in merged_edges if e["to"] == selected_table]
+        if out_edges:
+            st.markdown("*Joins to:*")
+            for e in out_edges:
+                conf = e.get("confidence", "?")
+                cols_str = e.get("join_cols", "")
+                st.markdown(f"→ **{e['to']}** `({conf})` {cols_str}")
+        if in_edges:
+            st.markdown("*Referenced by:*")
+            for e in in_edges:
+                conf = e.get("confidence", "?")
+                cols_str = e.get("join_cols", "")
+                st.markdown(f"← **{e['from']}** `({conf})` {cols_str}")
+        if not out_edges and not in_edges:
+            st.caption("No join edges for this table in current view.")
+
+    st.divider()
+    st.markdown("**💬 Ask about this table**")
+    q_col, btn_col = st.columns([4, 1])
+    with q_col:
+        suggested_q = st.text_input(
+            "Suggested question",
+            value=f"What metrics are available from {selected_table}?",
+            key="suggested_table_question",
+            label_visibility="collapsed",
+        )
+    with btn_col:
+        if st.button("Open in QB", key="open_in_qb", type="primary"):
+            st.session_state["prefill_question"] = suggested_q
+            st.switch_page("Query Builder.py")
 
 
 # ---------------------------------------------------------------------------
@@ -1070,26 +1048,44 @@ def main():
             st.warning("No table relationships found.")
         else:
             # ── Build and display the graph ───────────────────────────────────
-            try:
-                import plotly.graph_objects  # noqa: F401 — confirm plotly available
-                fig = build_plotly_graph(
-                    merged_nodes,
-                    merged_edges,
-                    fact_tables,
-                    high_only,
-                    usage_stats=usage_stats,
-                    view_mode=view_mode,
-                    focus_tables=focus_tables,
-                    ghost_nodes=ghost_nodes_set,
-                    column_data=column_data,
+            ag_nodes, ag_edges = build_agraph_data(
+                merged_nodes,
+                merged_edges,
+                fact_tables,
+                high_only,
+                usage_stats=usage_stats,
+                view_mode=view_mode,
+                focus_tables=focus_tables,
+                ghost_nodes=ghost_nodes_set,
+                column_data=column_data,
+            )
+            if not ag_nodes:
+                st.warning("No nodes to display after applying filters.")
+            else:
+                config = AConfig(
+                    width="100%",
+                    height=620,
+                    directed=True,
+                    physics=True,
+                    hierarchical=False,
                 )
-                if fig is None:
-                    st.warning("No nodes to display after applying filters.")
-                else:
-                    st.plotly_chart(fig, use_container_width=True)
-            except ImportError:
-                st.error("Plotly not installed. Run `pip install plotly` in your UI environment.")
-                st.stop()
+                clicked = agraph(nodes=ag_nodes, edges=ag_edges, config=config)
+                if clicked is not None:
+                    st.session_state["selected_graph_node"] = clicked
+
+            # ── Selected node detail panel ────────────────────────────────────
+            selected_table = st.session_state.get("selected_graph_node")
+            if selected_table and selected_table in set(merged_nodes):
+                st.divider()
+                _render_node_detail(
+                    selected_table,
+                    fact_tables,
+                    ghost_nodes_set,
+                    column_data,
+                    merged_edges,
+                    fact_table_counts,
+                    str(METRIC_REGISTRY),
+                )
 
             # ── Summary stats ─────────────────────────────────────────────────
             st.divider()

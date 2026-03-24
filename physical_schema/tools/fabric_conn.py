@@ -21,6 +21,7 @@ from typing import Optional
 import pandas as pd
 import pyodbc
 from azure.identity import InteractiveBrowserCredential
+from azure.identity._persistent_cache import TokenCachePersistenceOptions
 
 # Default Fabric connection settings (override via env vars)
 DEFAULT_SERVER = os.getenv(
@@ -61,7 +62,9 @@ class FabricConnection:
     def connect(self) -> None:
         """Acquire Azure AD token and open a pyodbc connection to Fabric."""
         if self._credential is None:
-            self._credential = InteractiveBrowserCredential()
+            self._credential = InteractiveBrowserCredential(
+                cache_persistence_options=TokenCachePersistenceOptions()
+            )
 
         token = self._credential.get_token(_SQL_TOKEN_SCOPE)
         token_bytes = _token_to_pyodbc_attrs(token.token)
