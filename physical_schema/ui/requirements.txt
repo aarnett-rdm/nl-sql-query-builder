@@ -7,4 +7,4 @@ plotly>=5.14.0
 kaleido>=0.2.1
 networkx>=3.0
 openpyxl>=3.1.0
-streamlit-agraph>=0.9.0
+streamlit-agraph>=0.0.45
