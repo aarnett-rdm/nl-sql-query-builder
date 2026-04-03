@@ -187,39 +187,29 @@
       "metrics": ["revenue"],
       "dimensions": [],
       "filters": {
-        "date": {},
+        "date": {"last_n_days": 30},
         "where": []
       },
       "compare": null,
-      "clarifications": [
-        {
-          "field": "dimensions",
-          "reason": "No grouping specified.",
-          "question": "How would you like the revenue broken down? By campaign, account, or just a total?"
-        }
-      ]
-    }
+      "clarifications": []
+    },
+    "note": "No grouping specified — default to aggregate totals. No date specified — default to last 30 days."
   },
   {
     "question": "Show me the performance",
     "spec": {
       "grain": null,
       "platform": null,
-      "metrics": [],
+      "metrics": ["clicks", "impressions", "cost"],
       "dimensions": [],
       "filters": {
-        "date": {},
+        "date": {"last_n_days": 30},
         "where": []
       },
       "compare": null,
-      "clarifications": [
-        {
-          "field": "metrics",
-          "reason": "No specific metrics identified.",
-          "question": "Which metrics do you want? Options include: clicks, impressions, cost, revenue, profit, conversions, conversion rate, CTR, CPC, ROI."
-        }
-      ]
-    }
+      "clarifications": []
+    },
+    "note": "Vague question — pick the most common core metrics as best guess. Never return empty metrics."
   },
   {
     "question": "Show me clicks and cost for events ending in the next 30 days",
@@ -278,5 +268,38 @@
       "clarifications": []
     },
     "note": "Can use campaign_calendar grain while filtering on EventDateTimeLocal"
+  },
+  {
+    "question": "Show me daily profit, cost and roi for all sports accounts for the last week grouped by day",
+    "spec": {
+      "grain": null,
+      "platform": null,
+      "metrics": ["profit", "cost", "roi"],
+      "dimensions": ["PST_Date"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "where": [{"field": "AccountName", "op": "contains", "value": "sports", "case_insensitive": true}]
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "'grouped by day' / 'daily' -> PST_Date dimension. 'sports accounts' -> AccountName contains filter, not campaign filter."
+  },
+  {
+    "question": "Give me impressions, clicks, cost, conversions, conversion rate and exchange revenue for all mlb campaigns on google in the performer sports account for the last week",
+    "spec": {
+      "grain": null,
+      "platform": "google_ads",
+      "metrics": ["impressions", "clicks", "cost", "conversions", "conversion rate", "exchange revenue"],
+      "dimensions": ["CampaignName"],
+      "filters": {
+        "date": {"last_n_days": 7},
+        "campaign": {"terms": ["mlb"], "mode": "any"},
+        "where": [{"field": "AccountName", "op": "=", "value": "performer sports", "case_insensitive": true}]
+      },
+      "compare": null,
+      "clarifications": []
+    },
+    "note": "Named account -> AccountName where filter. Campaign keyword -> campaign.terms. Platform 'google' -> google_ads."
   }
 ]
