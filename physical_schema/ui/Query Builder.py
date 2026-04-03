@@ -34,6 +34,7 @@ except ImportError:
 
 from tools.fabric_conn import FabricConnection  # noqa: E402
 from tools.query_history_store import QueryHistoryStore, QueryRecord  # noqa: E402
+from tools.feedback_store import CorrectionRecord, FeedbackStore, FeedbackLockedError, get_feedback_path  # noqa: E402
 from ui.shared import format_results, build_totals_row, init_fabric_state, render_fabric_sidebar, sanitize_filename, build_excel_bytes  # noqa: E402
 from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa: E402
 
@@ -42,6 +43,13 @@ from ui.viz_utils import detect_visualization_opportunity, create_chart  # noqa:
 # ---------------------------------------------------------------------------
 
 _history_store = QueryHistoryStore(_PROJECT_ROOT / "history" / "queries.jsonl")
+
+# ---------------------------------------------------------------------------
+# Feedback store — writes directly to NL_SQL_FEEDBACK_PATH (local Google Drive)
+# bypassing the Railway API so feedback is never lost on redeploy
+# ---------------------------------------------------------------------------
+
+_feedback_store = FeedbackStore(get_feedback_path())
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -246,22 +254,25 @@ def post_feedback(
     notes: str = "",
     assumed_fields: dict | None = None,
 ) -> dict:
-    """POST /feedback with user correction."""
-    r = requests.post(
-        f"{get_api_url()}/feedback",
-        json={
-            "request_id": request_id,
-            "original_question": original_question,
-            "original_spec": original_spec,
-            "corrected_spec": corrected_spec,
-            "correction_type": correction_type,
-            "notes": notes,
-            "assumed_fields": assumed_fields or {},
-        },
-        timeout=10,
+    """Write feedback directly to the local NL_SQL_FEEDBACK_PATH (Google Drive).
+
+    Bypasses the Railway API so records are written to the shared Drive folder
+    from the tester's machine and are never lost on API redeploy.
+    Returns a dict with feedback_id to match the old API response shape.
+    """
+    record = CorrectionRecord(
+        feedback_id=str(uuid.uuid4()),
+        timestamp=datetime.now().isoformat(),
+        request_id=request_id,
+        original_question=original_question,
+        original_spec=original_spec,
+        corrected_spec=corrected_spec,
+        correction_type=correction_type,
+        notes=notes,
+        assumed_fields=assumed_fields or {},
     )
-    r.raise_for_status()
-    return r.json()
+    _feedback_store.append(record)  # raises FeedbackLockedError on contention
+    return {"feedback_id": record.feedback_id, "status": "recorded"}
 
 
 # Results formatting is now in ui/shared.py
