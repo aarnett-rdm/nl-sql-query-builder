@@ -10,12 +10,16 @@ This page shows:
 
 from __future__ import annotations
 
+import json
+import os
+import shutil
 import sys
 import uuid as _uuid
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
 import streamlit as st
 
 # Ensure tools/ is importable
@@ -46,6 +50,10 @@ from tools.feedback_analyzer import (  # noqa: E402
 FEEDBACK_FILE = get_feedback_path()
 RECOMMENDATIONS_FILE = FEEDBACK_FILE.parent / "RECOMMENDATIONS.md"
 FEEDBACK_LOG_FILE = FEEDBACK_FILE.parent / "FEEDBACK_LOG.md"
+ARCHIVE_DIR = FEEDBACK_FILE.parent / "archive"
+
+_ADMIN_PIN = os.getenv("NL_SQL_ADMIN_PIN", "").strip()
+_API_URL = os.getenv("NL_SQL_API_URL", "http://localhost:8000").rstrip("/")
 
 # Stub spec used for manually-entered feedback (no real query ran)
 _STUB_SPEC: dict = {
@@ -97,6 +105,112 @@ def regenerate_markdown(records):
     RECOMMENDATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     RECOMMENDATIONS_FILE.write_text(recommendations_md, encoding="utf-8")
     FEEDBACK_LOG_FILE.write_text(feedback_log_md, encoding="utf-8")
+
+
+def archive_and_clear():
+    """Move corrections.jsonl to archive/corrections_YYYYMMDD.jsonl and start fresh."""
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = ARCHIVE_DIR / f"corrections_{stamp}.jsonl"
+    shutil.copy2(FEEDBACK_FILE, dest)
+    # Truncate the live file (don't delete — keeps path valid for next write)
+    FEEDBACK_FILE.write_text("", encoding="utf-8")
+    return dest
+
+
+def render_admin_section(records):
+    """PIN-gated admin panel: LLM analysis + archive."""
+    if not _ADMIN_PIN:
+        return  # No PIN configured — hide entirely
+
+    st.divider()
+    st.subheader("Admin")
+
+    # PIN gate — one entry per session
+    if not st.session_state.get("admin_unlocked"):
+        if st.session_state.get("admin_pin_failed"):
+            st.error("Incorrect PIN.")
+        pin_input = st.text_input("Enter admin PIN", type="password", key="admin_pin_input")
+        if st.button("Unlock", key="admin_unlock_btn"):
+            if pin_input == _ADMIN_PIN:
+                st.session_state["admin_unlocked"] = True
+                st.session_state["admin_pin_failed"] = False
+                st.rerun()
+            else:
+                st.session_state["admin_pin_failed"] = True
+                st.rerun()
+        return
+
+    # ── Unlocked ─────────────────────────────────────────────────────────────
+    st.caption(f"{len(records)} records ready for analysis.")
+
+    if not records:
+        st.info("No feedback to analyze yet.")
+        return
+
+    # Analyze button
+    if st.button("Analyze feedback & generate improvement prompt", type="primary", key="analyze_btn"):
+        with st.spinner("Sending to LLM for analysis…"):
+            try:
+                resp = requests.post(
+                    f"{_API_URL}/feedback/analyze",
+                    json={"records": [r.to_dict() for r in records]},
+                    timeout=90,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                st.session_state["analysis_prompt"] = data["prompt"]
+                st.session_state["analysis_record_count"] = data["record_count"]
+            except requests.HTTPError as e:
+                body = {}
+                try:
+                    body = e.response.json()
+                except Exception:
+                    pass
+                st.error(f"Analysis failed: {body.get('detail', str(e))}")
+            except Exception as e:
+                st.error(f"Analysis failed: {e}")
+
+    # Show result
+    if st.session_state.get("analysis_prompt"):
+        prompt = st.session_state["analysis_prompt"]
+        count = st.session_state.get("analysis_record_count", len(records))
+        st.success(f"Analysis complete — {count} records processed.")
+        st.caption("Copy the prompt below and paste it into Claude Code:")
+        st.text_area(
+            "Improvement prompt",
+            value=prompt,
+            height=400,
+            key="analysis_output",
+            label_visibility="collapsed",
+        )
+
+        st.divider()
+
+        # Archive step — separate confirmation so it can't be hit accidentally
+        st.caption("Once you've copied the prompt and applied the changes, archive the feedback file to start fresh.")
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("Archive & clear feedback", key="archive_btn", type="secondary"):
+                st.session_state["confirm_archive"] = True
+
+        if st.session_state.get("confirm_archive"):
+            st.warning("This will move corrections.jsonl to the archive folder and clear the live file. Are you sure?")
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("Yes, archive it", key="confirm_archive_yes", type="primary"):
+                    try:
+                        dest = archive_and_clear()
+                        st.success(f"Archived to {dest.name}. Live file cleared.")
+                        st.session_state["analysis_prompt"] = None
+                        st.session_state["confirm_archive"] = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Archive failed: {e}")
+            with c2:
+                if st.button("Cancel", key="confirm_archive_no"):
+                    st.session_state["confirm_archive"] = False
+                    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +490,9 @@ def main():
             )
         else:
             st.button("📋 Download FEEDBACK_LOG.md", disabled=True, use_container_width=True)
+
+    # Admin section (PIN-gated — hidden if NL_SQL_ADMIN_PIN not set)
+    render_admin_section(records)
 
     st.divider()
 

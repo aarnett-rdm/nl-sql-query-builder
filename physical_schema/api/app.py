@@ -946,6 +946,96 @@ def submit_feedback(req: FeedbackRequest):
     return FeedbackResponse(feedback_id=record.feedback_id)
 
 
+class FeedbackAnalyzeRequest(BaseModel):
+    records: List[Dict[str, Any]] = Field(
+        description="List of CorrectionRecord dicts read locally from corrections.jsonl"
+    )
+
+
+class FeedbackAnalyzeResponse(BaseModel):
+    prompt: str
+    record_count: int
+
+
+@app.post("/feedback/analyze", response_model=FeedbackAnalyzeResponse)
+def analyze_feedback(req: FeedbackAnalyzeRequest):
+    """Analyze a batch of correction records via LLM and return a ready-to-paste
+    improvement prompt the admin can paste into Claude Code."""
+    if not req.records:
+        raise HTTPException(status_code=400, detail="No records provided.")
+    if _llm_adapter is None or not _llm_adapter.backend.is_available():
+        raise HTTPException(status_code=503, detail="LLM not available.")
+
+    # Compact representation — drop large spec blobs, keep signal fields
+    compact = []
+    for r in req.records:
+        compact.append({
+            "question": r.get("original_question", ""),
+            "correction_type": r.get("correction_type", ""),
+            "notes": r.get("notes", ""),
+            "assumed_fields": r.get("assumed_fields", {}),
+        })
+
+    records_json = json.dumps(compact, indent=2)
+    n = len(compact)
+
+    system = (
+        "You are a helpful assistant analyzing user feedback for an NL-to-SQL query builder "
+        "used by a marketing analytics team. Your job is to identify patterns and produce a "
+        "specific, actionable improvement prompt that a developer can paste directly into "
+        "Claude Code to implement the fixes. Be concrete — name exact synonyms, exact example "
+        "questions, exact spec changes. Do not be vague."
+    )
+
+    user = f"""I have {n} user correction records from our NL-to-SQL query builder.
+
+Each record has:
+- question: what the user originally asked
+- correction_type: metric_mismatch | date_filter_wrong | platform_wrong | filter_wrong | dimension_wrong | other
+- notes: free text from the user about what was wrong
+- assumed_fields: auto-corrections the system applied (e.g. {{"metric \\"spend\\"": "auto-corrected to \\"cost\\""}})
+
+Records:
+{records_json}
+
+Analyze these records and produce a ready-to-paste prompt I can give to Claude Code to improve the system.
+
+Your response must be plain text (no markdown headers, no code fences around the whole thing) and follow this structure:
+
+I've analyzed {n} feedback records. Here's what needs to change:
+
+SYNONYMS TO ADD (metric_registry.json):
+- List each alias → canonical pair with occurrence count
+
+FEW-SHOT EXAMPLES TO ADD (few_shot_examples.json):
+- For each recurring question pattern, provide: Q: "..." and the correct Spec JSON
+
+SYSTEM PROMPT CHANGES (system_prompt.txt):
+- Any default or rule changes needed
+
+OTHER OBSERVATIONS:
+- Anything else worth noting
+
+If a section has nothing actionable, write "None identified."
+"""
+
+    try:
+        result = _run_with_timeout(
+            _llm_adapter.backend.chat,
+            system,
+            user,
+            False,  # json_mode=False — we want plain text
+            0.2,
+            timeout_sec=60,
+        )
+        prompt_text = result.content.strip()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LLM analysis failed: {e}")
+
+    _log_json("feedback_analyzed", request_id="admin", record_count=n)
+    return FeedbackAnalyzeResponse(prompt=prompt_text, record_count=n)
+
+
 def _probe_ollama() -> bool:
     """Check Ollama availability without relying on the current adapter."""
     try:
