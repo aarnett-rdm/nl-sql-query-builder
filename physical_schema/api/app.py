@@ -979,17 +979,57 @@ def analyze_feedback(req: FeedbackAnalyzeRequest):
     records_json = json.dumps(compact, indent=2)
     n = len(compact)
 
+    # Inject canonical metric names and existing synonyms so the LLM knows
+    # what's valid and doesn't invent or reverse mappings
+    canonical_metrics = sorted(_llm_adapter.schema_ctx.metric_names)
+    existing_synonyms = _llm_adapter.schema_ctx.metric_synonyms
+    canonical_dims = _llm_adapter.schema_ctx.dimension_names
+    metrics_str = ", ".join(canonical_metrics)
+    existing_syn_str = json.dumps(existing_synonyms, indent=2)
+
+    spec_schema = """{
+  "grain": null,
+  "platform": "google_ads" | "microsoft_ads" | null,
+  "metrics": ["<canonical_metric_name>", ...],
+  "dimensions": ["<canonical_dimension_name>", ...],
+  "filters": {
+    "date": {"last_n_days": N} | {"yesterday": true} | {"mtd": true} | {"date_from": "YYYY-MM-DD", "date_to": "YYYY-MM-DD"},
+    "campaign": {"terms": ["<text>"], "mode": "any"},
+    "where": [{"field": "<column>", "op": "=|contains|...", "value": "<val>", "case_insensitive": true}]
+  },
+  "compare": null,
+  "clarifications": []
+}"""
+
     system = (
         "You are a helpful assistant analyzing user feedback for an NL-to-SQL query builder "
         "used by a marketing analytics team. Your job is to identify patterns and produce a "
         "specific, actionable improvement prompt that a developer can paste directly into "
-        "Claude Code to implement the fixes. Be concrete — name exact synonyms, exact example "
-        "questions, exact spec changes. Do not be vague."
+        "Claude Code to implement the fixes. Be concrete and accurate. Do not invent metric "
+        "names or spec fields that don't exist in the schema provided."
     )
 
     user = f"""I have {n} user correction records from our NL-to-SQL query builder.
 
-Each record has:
+CANONICAL METRIC NAMES (the only valid values for the metrics array):
+{metrics_str}
+
+CANONICAL DIMENSION NAMES (the only valid values for the dimensions array):
+{", ".join(canonical_dims)}
+
+EXISTING SYNONYMS (already in the registry — do NOT suggest these again):
+{existing_syn_str}
+
+SPEC JSON SCHEMA (all few-shot examples must use exactly this format):
+{spec_schema}
+
+SYNONYM RULES:
+- Format is always: user_term → canonical_metric_name
+- The RIGHT side must be a canonical metric name from the list above
+- The LEFT side is the alias/term the user typed
+- Example: "spend" → "cost"  (NOT "cost" → "spend")
+
+Each feedback record has:
 - question: what the user originally asked
 - correction_type: metric_mismatch | date_filter_wrong | platform_wrong | filter_wrong | dimension_wrong | other
 - notes: free text from the user about what was wrong
@@ -1000,21 +1040,21 @@ Records:
 
 Analyze these records and produce a ready-to-paste prompt I can give to Claude Code to improve the system.
 
-Your response must be plain text (no markdown headers, no code fences around the whole thing) and follow this structure:
+Your response must be plain text and follow this exact structure:
 
 I've analyzed {n} feedback records. Here's what needs to change:
 
 SYNONYMS TO ADD (metric_registry.json):
-- List each alias → canonical pair with occurrence count
+- List each alias → canonical_metric_name with occurrence count. Right side must be from the canonical list.
 
 FEW-SHOT EXAMPLES TO ADD (few_shot_examples.json):
-- For each recurring question pattern, provide: Q: "..." and the correct Spec JSON
+- For each recurring question pattern: Q: "..." then the correct Spec JSON using only the schema above.
 
 SYSTEM PROMPT CHANGES (system_prompt.txt):
-- Any default or rule changes needed
+- Any default or rule changes needed.
 
 OTHER OBSERVATIONS:
-- Anything else worth noting
+- Anything else worth noting.
 
 If a section has nothing actionable, write "None identified."
 """
