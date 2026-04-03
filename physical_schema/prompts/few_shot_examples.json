@@ -295,11 +295,11 @@
       "filters": {
         "date": {"last_n_days": 7},
         "campaign": {"terms": ["mlb"], "mode": "any"},
-        "where": [{"field": "AccountName", "op": "contains", "value": "performer sports", "case_insensitive": true}]
+        "where": [{"field": "AccountName", "op": "contains", "value": "performer-sports", "case_insensitive": true}]
       },
       "compare": null,
       "clarifications": []
     },
-    "note": "Account name from user may be partial (e.g. 'performer sports' matches 'Go-Performer-Sports') -> always use contains, never = for AccountName. Campaign keyword -> campaign.terms. Platform 'google' -> google_ads."
+    "note": "AccountName: replace spaces with dashes and use contains ('performer sports' -> 'performer-sports' matches 'Go-Performer-Sports'). Campaign keyword -> campaign.terms. Platform 'google' -> google_ads."
   }
 ]

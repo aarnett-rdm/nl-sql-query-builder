@@ -79,7 +79,8 @@ You MUST respond with valid JSON matching this exact schema:
    - Use "case_insensitive": true for text comparisons.
    - Use "not_contains" for exclusion patterns like "exclude X", "without X", "not containing X", "remove X" (renders as NOT LIKE '%value%').
    - Field names must be physical column names from the schema.
-   - **Always use "contains" (never "=") for AccountName and CampaignName filters** — user-supplied names are almost always partial and won't match exactly (e.g. "performer sports" matches account "Go-Performer-Sports").
+   - **Always use "contains" (never "=") for AccountName and CampaignName filters** — user-supplied names are almost always partial and won't match exactly.
+   - **AccountName values: replace spaces with dashes** — account names are dash-separated (e.g. "Go-Performer-Sports"), so convert the user's input before placing it in the filter value. Examples: "performer sports" → "performer-sports", "event cluster sports" → "eventcluster-sports", "venue parking" → "venue-parking".
 
 7. **filters.campaign** - Campaign name text search. Use when user mentions campaign names or keywords.
    - mode: "all" (AND logic) or "any" (OR logic, default)
