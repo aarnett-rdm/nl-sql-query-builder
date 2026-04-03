@@ -61,20 +61,11 @@ Still in Command Prompt:
 
 ### Step 5: Create Your Configuration File
 
-The app needs a small configuration file for the shared feedback path. The API connection is already pre-configured.
+Everything is pre-configured — you just need to create the file.
 
 1. In your `nl-sql-query-builder\physical_schema` folder, find the file called `.env.example`
 2. Make a copy of it and rename the copy to `.env` (no `.example` at the end)
-3. Open `.env` in Notepad
-4. Find the line that says:
-   ```
-   NL_SQL_FEEDBACK_PATH=
-   ```
-5. Set the line to exactly this path:
-   ```
-   NL_SQL_FEEDBACK_PATH=G:/Shared drives/Tickets/Sports Team/Query Tool Feedback/corrections.jsonl
-   ```
-6. Save and close the file
+3. That's it — no editing needed!
 
 ### Step 6: Create Desktop Shortcut (Optional but Recommended)
 
@@ -187,7 +178,7 @@ This is often caused by a Windows setting that intercepts the `python` command a
 
 **Fix:** The app can't reach the shared API server.
 1. Open your `.env` file in Notepad (it's in `nl-sql-query-builder\physical_schema\`)
-2. Check that `NL_SQL_API_URL=` has the correct URL your admin gave you — it should start with `https://`, not `http://localhost`
+2. Check that `NL_SQL_API_URL=` starts with `https://` — if it says `http://localhost` the file wasn't set up correctly, delete it and re-copy from `.env.example`
 3. Save the file and restart the app
 4. If it still doesn't work, contact your admin to confirm the API server is running
 
@@ -203,10 +194,11 @@ This is often caused by a Windows setting that intercepts the `python` command a
 
 ### Feedback isn't showing up for the team
 
-**Fix:** The shared feedback path isn't configured.
-1. Open your `.env` file in Notepad (it's in `nl-sql-query-builder\physical_schema\`)
-2. Check that `NL_SQL_FEEDBACK_PATH=` has the correct path (ask your admin if unsure)
-3. Restart the app
+**Fix:** Google Drive for Desktop isn't running or you're not signed in.
+1. Check the system tray (bottom-right of taskbar) for the Google Drive icon
+2. If it's not there, open Google Drive for Desktop from the Start menu
+3. Sign in with your work Google account if prompted
+4. Restart the app
 
 ### Getting Updates
 
