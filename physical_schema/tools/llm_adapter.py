@@ -31,9 +31,11 @@ from typing import Any, Dict, List, Optional, Tuple
 try:
     from tools.exceptions import OllamaError, LLMBackendError
     from tools.llm_backend import LLMBackend, ChatResult
+    from tools.spec_validator import validate_and_correct
 except ImportError:
     from exceptions import OllamaError, LLMBackendError
     from llm_backend import LLMBackend, ChatResult
+    from spec_validator import validate_and_correct
 
 logger = logging.getLogger("nl_sql_service.llm")
 
@@ -652,19 +654,27 @@ class LLMAdapter:
         # Normalize structure
         spec = _ensure_spec_structure(raw_spec)
 
-        # Validate against known schema
-        is_valid, warnings = validate_spec(spec, self.schema_ctx)
-        if warnings:
-            logger.info("Spec validation warnings: %s", warnings)
-            # Add non-fatal warnings to notes
-            spec.setdefault("notes", {})["validation_warnings"] = warnings
+        # Run post-LLM correction: fuzzy-match metrics/dims, inject date default,
+        # strip clarifications, build interpretation summary for the UI.
+        spec, interpretation = validate_and_correct(
+            spec,
+            valid_metrics=self.schema_ctx.metric_names,
+            valid_dims=self.schema_ctx.dimension_names,
+            synonyms=self.schema_ctx.metric_synonyms,
+        )
+        spec.setdefault("notes", {})["interpretation"] = interpretation
 
-        if not is_valid:
-            raise ValueError(f"LLM spec has invalid metrics: {warnings}")
+        # Only raise if we ended up with no metrics at all — genuinely unresolvable.
+        if not spec.get("metrics"):
+            raise ValueError(
+                "Could not resolve any metrics from the question. "
+                "Please mention a specific metric (e.g. clicks, cost, impressions)."
+            )
 
         logger.info(
-            "LLM parse complete: model=%s, elapsed=%dms, metrics=%s, dims=%s",
+            "LLM parse complete: model=%s, elapsed=%dms, metrics=%s, dims=%s, assumed=%s",
             result.model, elapsed_ms, spec["metrics"], spec["dimensions"],
+            list(interpretation.get("assumed", {}).keys()),
         )
 
         return spec

@@ -182,6 +182,14 @@ class QueryResponse(BaseModel):
     spec: Dict[str, Any]
     sql: Optional[str] = None
     clarifications: list = Field(default_factory=list)
+    interpretation: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Human-readable summary of what the system interpreted. "
+            "Keys: summary (str), metrics, date_label, platform_label, "
+            "dimensions_label, assumed (dict of field→reason for auto-corrections)."
+        ),
+    )
 
 
 _SPEC_REQUIRED_KEYS = {"grain", "platform", "metrics", "dimensions", "filters"}
@@ -226,6 +234,11 @@ class FeedbackRequest(BaseModel):
         description="Category: metric_mismatch, dimension_wrong, platform_wrong, date_filter_wrong, filter_wrong, other"
     )
     notes: str = Field(default="", max_length=2000)
+    assumed_fields: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Auto-corrections the validator applied (from interpretation.assumed). "
+                    "Stored on the record for downstream analysis.",
+    )
 
     @field_validator("correction_type")
     @classmethod
@@ -686,21 +699,29 @@ def query(
 
     spec = _parse_question(req.question, req.previous_context)
     parser_used = spec.get("notes", {}).get("parser", "rule_based")
+    interpretation = spec.get("notes", {}).get("interpretation")
 
-    clarifications = spec.get("clarifications", []) or []
-    if clarifications:
+    # Only block on clarification when there are genuinely no metrics — everything
+    # else has been auto-corrected/defaulted by spec_validator. The UI will show the
+    # interpretation card so the user can see what was assumed.
+    if not spec.get("metrics"):
         _log_json(
-            "query_clarifications",
+            "query_no_metrics",
             request_id=request_id,
             parser=parser_used,
-            clarifications_count=len(clarifications),
             elapsed_ms=int((time.time() - t0) * 1000),
         )
         return QueryResponse(
             request_id=request_id,
             spec=spec,
             sql=None,
-            clarifications=clarifications,
+            clarifications=[{
+                "field": "metrics",
+                "reason": "no_metrics_resolved",
+                "question": "Which metrics would you like to see? (e.g. clicks, cost, impressions, conversions)",
+                "choices": [],
+            }],
+            interpretation=interpretation,
         )
 
     try:
@@ -725,6 +746,7 @@ def query(
                     spec=spec,
                     sql=sql,
                     clarifications=[],
+                    interpretation=interpretation,
                 )
             except Exception as retry_exc:
                 logger.warning(
@@ -750,6 +772,7 @@ def query(
             spec=spec,
             sql=None,
             clarifications=[clarification],
+            interpretation=interpretation,
         )
 
     _log_json(
@@ -764,6 +787,7 @@ def query(
         spec=spec,
         sql=sql,
         clarifications=[],
+        interpretation=interpretation,
     )
 
 
@@ -901,6 +925,7 @@ def submit_feedback(req: FeedbackRequest):
         corrected_spec=req.corrected_spec,
         correction_type=req.correction_type,
         notes=req.notes,
+        assumed_fields=req.assumed_fields,
     )
     try:
         _feedback_store.append(record)

@@ -79,6 +79,7 @@ class CorrectionRecord:
     corrected_spec: Dict[str, Any]
     correction_type: str
     notes: str = ""
+    assumed_fields: Dict[str, str] = dataclasses.field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

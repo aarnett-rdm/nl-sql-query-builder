@@ -70,13 +70,11 @@ The app needs a small configuration file for the shared feedback path. The API c
    ```
    NL_SQL_FEEDBACK_PATH=
    ```
-5. Add the shared feedback folder path after the `=` sign (your admin will give you this path). It will look something like:
+5. Set the line to exactly this path:
    ```
    NL_SQL_FEEDBACK_PATH=G:/Shared drives/Tickets/Sports Team/Query Tool Feedback/corrections.jsonl
    ```
 6. Save and close the file
-
-> **Note:** If your admin hasn't set up a shared folder yet, you can leave `NL_SQL_FEEDBACK_PATH` blank — your feedback will save locally on your own computer instead.
 
 ### Step 6: Create Desktop Shortcut (Optional but Recommended)
 

@@ -244,6 +244,7 @@ def post_feedback(
     corrected_spec: dict,
     correction_type: str,
     notes: str = "",
+    assumed_fields: dict | None = None,
 ) -> dict:
     """POST /feedback with user correction."""
     r = requests.post(
@@ -255,6 +256,7 @@ def post_feedback(
             "corrected_spec": corrected_spec,
             "correction_type": correction_type,
             "notes": notes,
+            "assumed_fields": assumed_fields or {},
         },
         timeout=10,
     )
@@ -382,93 +384,163 @@ def render_sidebar():
 
 
 # ---------------------------------------------------------------------------
+# Interpretation card
+# ---------------------------------------------------------------------------
+
+def render_interpretation_card(msg: dict, idx: int):
+    """Render the 'I interpreted this as...' card above the SQL expander.
+
+    Shows what the system is running and highlights any auto-corrections or
+    defaults that were applied. Only shown when an interpretation is present.
+    """
+    interpretation = msg.get("interpretation")
+    if not interpretation:
+        return
+
+    summary = interpretation.get("summary", "")
+    assumed = interpretation.get("assumed") or {}
+
+    if assumed:
+        # Some fields were auto-corrected/defaulted — show with a warning tint
+        lines = [f"**{summary}**"]
+        lines.append("")
+        lines.append("*Auto-corrections applied:*")
+        for field, reason in assumed.items():
+            lines.append(f"- {field}: {reason}")
+        st.warning("\n".join(lines), icon="⚠️")
+    else:
+        st.info(f"**{summary}**", icon="ℹ️")
+
+
+# ---------------------------------------------------------------------------
 # Feedback UI
 # ---------------------------------------------------------------------------
 
-def render_feedback_ui(msg: dict, idx: int):
-    """Render feedback buttons and correction form for a message with SQL."""
-    # Skip if feedback already submitted
+def render_feedback_ui(msg: dict, idx: int, is_latest: bool = False):
+    """Render the feedback gate after results.
+
+    Shows correction-type buttons immediately (no extra 👎 toggle).
+    Thumbs-up submits a positive signal in one click.
+    Wrong-* buttons expand the correction form inline.
+    Skip is always available to avoid blocking power users.
+    For the latest result, auto-expands so feedback is front-and-center.
+    """
     if msg.get("feedback_submitted"):
         st.caption("✅ Thank you for your feedback!")
         return
 
-    # Get the original question (look back in messages for user message)
+    if msg.get("feedback_skipped"):
+        return
+
+    # Get the original question
     original_question = ""
     for i in range(idx - 1, -1, -1):
         if st.session_state.messages[i]["role"] == "user":
             original_question = st.session_state.messages[i]["content"]
             break
 
+    interpretation = msg.get("interpretation") or {}
+    assumed_fields = interpretation.get("assumed") or {}
+
     st.divider()
 
-    col1, col2, col3 = st.columns([1, 1, 8])
-    with col1:
-        thumbs_up = st.button("👍 Correct", key=f"thumbs_up_{idx}", use_container_width=True)
-    with col2:
-        thumbs_down = st.button("👎 Wrong", key=f"thumbs_down_{idx}", use_container_width=True)
+    # Primary row: Looks Right + Wrong-* category shortcuts + Skip
+    st.caption("Was this what you wanted?")
+    btn_cols = st.columns([1.2, 1.2, 1.2, 1.2, 1.2, 1])
 
-    if thumbs_up:
-        msg["feedback_submitted"] = True
-        st.success("✅ Thanks! Glad it worked.")
-        st.rerun()
+    correction_type_map = {
+        "Wrong metric": "metric_mismatch",
+        "Wrong date": "date_filter_wrong",
+        "Wrong filters": "filter_wrong",
+        "Wrong platform": "platform_wrong",
+    }
 
-    if thumbs_down or msg.get("show_feedback_form"):
-        msg["show_feedback_form"] = True
+    with btn_cols[0]:
+        if st.button("👍 Looks right", key=f"thumbs_up_{idx}", use_container_width=True, type="primary"):
+            spec = msg.get("spec", {})
+            request_id = msg.get("request_id", "")
+            if spec and request_id:
+                try:
+                    post_feedback(
+                        request_id=request_id,
+                        original_question=original_question,
+                        original_spec=spec,
+                        corrected_spec=spec,
+                        correction_type="other",
+                        notes="user confirmed correct",
+                        assumed_fields=assumed_fields,
+                    )
+                except Exception:
+                    pass  # Non-critical — positive signal, fail silently
+            msg["feedback_submitted"] = True
+            st.rerun()
 
-        with st.expander("🔧 Help us improve", expanded=True):
-            st.caption("Tell us what was wrong so we can fix it:")
+    for col_i, (label, ctype) in enumerate(correction_type_map.items(), start=1):
+        with btn_cols[col_i]:
+            if st.button(label, key=f"wrong_{ctype}_{idx}", use_container_width=True):
+                msg["show_feedback_form"] = True
+                msg["preset_correction_type"] = ctype
+                st.rerun()
 
-            # Correction type selection
-            correction_type_map = {
-                "Wrong metrics": "metric_mismatch",
-                "Wrong dimensions/columns": "dimension_wrong",
-                "Wrong platform (Google/Microsoft)": "platform_wrong",
-                "Wrong date range": "date_filter_wrong",
-                "Wrong filters": "filter_wrong",
-                "Other": "other",
+    with btn_cols[5]:
+        if st.button("Skip", key=f"skip_feedback_{idx}", use_container_width=True):
+            msg["feedback_skipped"] = True
+            st.rerun()
+
+    # Correction form — expanded when a wrong-* button was pressed
+    if msg.get("show_feedback_form"):
+        with st.expander("Tell us what was wrong", expanded=True):
+            correction_type_display_map = {
+                "metric_mismatch": "Wrong metrics",
+                "dimension_wrong": "Wrong dimensions/columns",
+                "platform_wrong": "Wrong platform (Google/Microsoft)",
+                "date_filter_wrong": "Wrong date range",
+                "filter_wrong": "Wrong filters",
+                "other": "Other",
             }
+            all_display = list(correction_type_display_map.values())
+            preset = msg.get("preset_correction_type", "other")
+            preset_display = correction_type_display_map.get(preset, "Other")
+            default_idx = all_display.index(preset_display) if preset_display in all_display else 0
 
             correction_type_display = st.selectbox(
                 "What was wrong?",
-                options=list(correction_type_map.keys()),
+                options=all_display,
+                index=default_idx,
                 key=f"correction_type_{idx}",
             )
-            correction_type = correction_type_map[correction_type_display]
+            # Reverse map back to API type key
+            reverse_map = {v: k for k, v in correction_type_display_map.items()}
+            correction_type = reverse_map.get(correction_type_display, "other")
 
-            # Free-form notes
             notes = st.text_area(
                 "What should it have been? (optional but helpful)",
-                placeholder="E.g., 'Should use revenue metric instead of impressions' or 'Date should be last month not last week'",
+                placeholder="E.g., 'Should use revenue metric instead of impressions'",
                 key=f"notes_{idx}",
-                height=100,
+                height=90,
             )
 
-            # Submit button
             col_submit, col_cancel = st.columns([1, 1])
             with col_submit:
-                if st.button("Submit Feedback", key=f"submit_feedback_{idx}", type="primary", use_container_width=True):
-                    # Get spec and request_id from message (if available)
+                if st.button("Submit", key=f"submit_feedback_{idx}", type="primary", use_container_width=True):
                     spec = msg.get("spec", {})
                     request_id = msg.get("request_id", "")
-
                     if not spec:
                         st.error("Cannot submit feedback: no spec available.")
                     else:
                         try:
-                            # For now, corrected_spec is same as original (user provides notes)
-                            # In future, could have UI to edit the spec
                             feedback_resp = post_feedback(
                                 request_id=request_id,
                                 original_question=original_question,
                                 original_spec=spec,
-                                corrected_spec=spec,  # TODO: allow editing
+                                corrected_spec=spec,
                                 correction_type=correction_type,
                                 notes=notes,
+                                assumed_fields=assumed_fields,
                             )
                             msg["feedback_submitted"] = True
                             msg["show_feedback_form"] = False
-                            st.success(f"✅ Feedback submitted! ID: {feedback_resp.get('feedback_id', '')[:8]}")
-                            st.caption("Your feedback will help improve the system. Thank you!")
+                            st.success(f"✅ Thanks! Feedback recorded.")
                             st.rerun()
                         except requests.HTTPError as e:
                             if e.response is not None and e.response.status_code == 409:
@@ -544,6 +616,8 @@ def render_chat_history():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg.get("sql"):
+                # Interpretation card — show what the system assumed before the SQL
+                render_interpretation_card(msg, idx)
                 expanded = st.session_state.get("auto_expand_sql", False)
                 with st.expander("View Generated SQL", expanded=expanded):
                     edited_sql = st.text_area(
@@ -709,7 +783,7 @@ def render_chat_history():
 
             # Feedback UI (only for assistant messages with SQL)
             if msg["role"] == "assistant" and msg.get("sql"):
-                render_feedback_ui(msg, idx)
+                render_feedback_ui(msg, idx, is_latest=(idx == last_assistant_idx))
 
 
 def render_run_query(msg: dict, idx: int, sql: str | None = None):
@@ -754,6 +828,7 @@ def append_assistant_message(
     error_detail=None,
     spec: dict | None = None,
     request_id: str | None = None,
+    interpretation: dict | None = None,
 ):
     msg = {"role": "assistant", "content": content}
     if sql:
@@ -764,6 +839,8 @@ def append_assistant_message(
         msg["spec"] = spec
     if request_id:
         msg["request_id"] = request_id
+    if interpretation:
+        msg["interpretation"] = interpretation
     st.session_state.messages.append(msg)
 
 
@@ -826,6 +903,7 @@ def handle_query_response(data: dict):
     request_id = data.get("request_id", "")
     spec = data.get("spec", {})
     parser = spec.get("notes", {}).get("parser", "")
+    interpretation = data.get("interpretation") or spec.get("notes", {}).get("interpretation")
 
     if sql and not clars:
         # Success — we have SQL
@@ -836,7 +914,9 @@ def handle_query_response(data: dict):
             meta_parts.append(f"Parser: {parser}")
         meta = "  \n".join(meta_parts)
         content = "Here's your query:" + (f"\n\n{meta}" if meta else "")
-        append_assistant_message(content, sql=sql, spec=spec, request_id=request_id)
+        append_assistant_message(
+            content, sql=sql, spec=spec, request_id=request_id, interpretation=interpretation
+        )
 
         # Save context for follow-up chaining: use the raw user question from messages
         user_question = ""
